@@ -608,6 +608,12 @@ class RingGroup : public GroupImpl {
     SWITCH_TYPE(output, all_sum<T>(input, output, stream));
   }
 
+  // TODO: placeholder
+  void all_sum_quantized(const array& input, array& output, Stream stream)
+      override {
+    SWITCH_TYPE(output, all_sum_quantized<T>(input, output, stream));
+  }
+
   std::shared_ptr<GroupImpl> split(int color, int key = -1) override {
     throw std::runtime_error("[ring] Group split not supported.");
   }
@@ -857,6 +863,12 @@ class RingGroup : public GroupImpl {
     }
     sends[b].wait();
     recvs[b].wait();
+  }
+
+  // TODO: placeholder
+  template <typename T>
+  void all_sum_quantized(const array& input, array& output, Stream stream) {
+    all_sum<T>(input, output, stream);
   }
 
   void all_gather_impl(

@@ -36,6 +36,33 @@ array all_sum(
       {x});
 }
 
+// TODO: placeholder
+array all_sum_quantized(
+    const array& x,
+    std::optional<Group> group_ /* = std::nullopt */,
+    int group_size_ /* = 64 */,
+    int bits_ /* = 4 */,
+    StreamOrDevice s /* = {} */) {
+  auto group = to_group(group_);
+
+  if (group.size() == 1) {
+    return x;
+  }
+
+  auto packed_shape = x.shape();
+
+  return array(
+      packed_shape,
+      uint32_t,
+      std::make_shared<AllReduce>(
+          to_stream(s, Device::cpu),
+          group,
+          AllReduce::SumQuantized,
+          group_size_,
+          bits_),
+      {x});
+}
+
 array all_gather(
     const array& x,
     std::optional<Group> group_ /* = std::nullopt */,

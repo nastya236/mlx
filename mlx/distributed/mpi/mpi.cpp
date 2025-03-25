@@ -8,6 +8,7 @@
 #include "mlx/distributed/distributed_impl.h"
 #include "mlx/distributed/mpi/mpi.h"
 #include "mlx/distributed/mpi/mpi_declarations.h"
+#include "mlx/ops.h"
 
 #define LOAD_SYMBOL(symbol, variable)                              \
   {                                                                \
@@ -304,6 +305,22 @@ class MPIGroup : public GroupImpl {
         mpi().datatype(input),
         mpi().op_sum(input),
         comm_);
+  }
+
+  // TODO: placeholder
+
+  void all_sum_quantized(
+      const array& input,
+      array& output,
+      int group_size,
+      int bits,
+      Stream stream) override {
+    // output should be packed with group_size * bits bits so output is uint32
+
+    auto [q, scale, bias] = quantize(input, group_size, bits, stream);
+    all_sum(q, output, stream);
+    dequantize(output, scale, bias, stream);
+    // dequantization
   }
 
   void all_gather(const array& input, array& output, Stream stream) override {

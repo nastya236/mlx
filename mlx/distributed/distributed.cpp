@@ -15,6 +15,17 @@ void all_sum(Group group, const array& input, array& output, Stream stream) {
   group.raw_group()->all_sum(input, output, stream);
 }
 
+// TODO: placeholder
+void all_sum_quantized(
+    Group group,
+    const array& input,
+    array& output,
+    int group_size,
+    int bits,
+    Stream stream) {
+  group.raw_group()->all_sum_quantized(input, output, group_size, bits, stream);
+}
+
 void all_gather(Group group, const array& input, array& output, Stream stream) {
   group.raw_group()->all_gather(input, output, stream);
 }
@@ -42,6 +53,11 @@ class EmptyGroup : public GroupImpl {
   }
 
   void all_sum(const array&, array&, Stream) override {
+    throw std::runtime_error(
+        "Communication not implemented in an empty distributed group.");
+  }
+  // TODO: placeholder
+  void all_sum_quantized(const array&, array&, int, int, Stream) override {
     throw std::runtime_error(
         "Communication not implemented in an empty distributed group.");
   }

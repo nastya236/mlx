@@ -23,10 +23,18 @@ class DistPrimitive : public Primitive {
 
 class AllReduce : public DistPrimitive {
  public:
-  enum ReduceType { And, Or, Sum, Prod, Min, Max };
+  enum ReduceType { And, Or, Sum, Prod, Min, Max, SumQuantized };
 
-  AllReduce(Stream stream, Group group, ReduceType reduce_type)
-      : DistPrimitive(stream, group), reduce_type_(reduce_type) {}
+  AllReduce(
+      Stream stream,
+      Group group,
+      ReduceType reduce_type,
+      int group_size = 64,
+      int bits = 4)
+      : DistPrimitive(stream, group),
+        reduce_type_(reduce_type),
+        group_size_(group_size),
+        bits_(bits) {}
 
   void eval_cpu(const std::vector<array>& inputs, std::vector<array>& outputs)
       override;
@@ -70,6 +78,8 @@ class AllReduce : public DistPrimitive {
 
  private:
   ReduceType reduce_type_;
+  int group_size_;
+  int bits_;
 };
 
 class AllGather : public DistPrimitive {

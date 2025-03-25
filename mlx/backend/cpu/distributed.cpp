@@ -21,7 +21,9 @@ std::pair<array, bool> ensure_row_contiguous(const array& arr, Stream stream) {
 
 void AllReduce::eval_cpu(
     const std::vector<array>& inputs,
-    std::vector<array>& outputs) {
+    std::vector<array>& outputs,
+    int group_size = 64,
+    int bits = 8) {
   assert(inputs.size() == 1);
   assert(outputs.size() == 1);
 
@@ -45,6 +47,10 @@ void AllReduce::eval_cpu(
   switch (reduce_type_) {
     case Sum:
       distributed::detail::all_sum(group(), in, outputs[0], stream());
+      break;
+    case SumQuantized:
+      distributed::detail::all_sum_quantized(
+          group(), in, outputs[0], group_size, bits, stream());
       break;
     default:
       throw std::runtime_error("Only all reduce sum is supported for now");

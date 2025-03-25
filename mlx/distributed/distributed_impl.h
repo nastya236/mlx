@@ -18,6 +18,12 @@ class GroupImpl {
   virtual std::shared_ptr<GroupImpl> split(int color, int key = -1) = 0;
 
   virtual void all_sum(const array& input, array& output, Stream stream) = 0;
+  virtual void all_sum_quantized(
+      const array& input,
+      array& output,
+      int group_size,
+      int bits,
+      Stream stream) = 0;
   virtual void all_gather(const array& input, array& output, Stream stream) = 0;
   virtual void send(const array& input, int dst, Stream stream) = 0;
   virtual void recv(array& out, int src, Stream stream) = 0;
@@ -25,6 +31,15 @@ class GroupImpl {
 
 /* Perform an all reduce sum operation */
 void all_sum(Group group, const array& input, array& output, Stream stream);
+
+// TODO: placeholder
+void all_sum_quantized(
+    Group group,
+    const array& input,
+    array& output,
+    Stream stream,
+    unint group_size,
+    unint bits);
 
 /* Perform an all gather operation */
 void all_gather(Group group, const array& input, array& output, Stream stream);

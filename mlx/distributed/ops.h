@@ -14,6 +14,13 @@ array all_sum(
     std::optional<Group> group = std::nullopt,
     StreamOrDevice s = {});
 
+array all_sum_quantized(
+    const array& x,
+    std::optional<Group> group = std::nullopt,
+    int group_size = 64,
+    int bits = 4,
+    StreamOrDevice s = {});
+
 array all_gather(
     const array& x,
     std::optional<Group> group = std::nullopt,
