@@ -71,24 +71,6 @@ def checkpoint(module: Module, fn: Optional[Callable] = None):
     return wrapped_checkpointed_fn
 
 
-def _group_gradients(keys, sizes, all_reduce_size, itemsize):
-    grad_groups = []
-    grad_group = []
-    grad_group_size = 0
-    for i in range(len(keys)):
-        grad_group.append(i)
-        grad_group_size += sizes[i] * itemsize
-        if grad_group_size >= all_reduce_size:
-            grad_groups.append(grad_group)
-            grad_group = []
-            grad_group_size = 0
-    if grad_group:
-        grad_groups.append(grad_group)
-        grad_group = []
-
-    return grad_groups
-
-
 def average_gradients(
     gradients: Any,
     group: Optional[mx.distributed.Group] = None,
@@ -141,13 +123,26 @@ def average_gradients(
         # We can't group them if they have mixed types
         if not all(dt == dtypes[0] for dt in dtypes):
             return average_gradients(gradients, group, 0, communication_type)
-
         itemsize = (
             communication_type.size
             if communication_type is not None
             else dtypes[0].size
         )
-        grad_groups = _group_gradients(keys, sizes, all_reduce_size, itemsize)
+
+        # Gather the gradients in groups that are just above or equal to all_reduce_size
+        grad_groups = []
+        grad_group = []
+        grad_group_size = 0
+        for i in range(len(keys)):
+            grad_group.append(i)
+            grad_group_size += sizes[i] * itemsize
+            if grad_group_size >= all_reduce_size:
+                grad_groups.append(grad_group)
+                grad_group = []
+                grad_group_size = 0
+        if grad_group:
+            grad_groups.append(grad_group)
+            grad_group = []
 
         # Concatenate-reduce-split
         new_flat_grads = []
@@ -164,80 +159,3 @@ def average_gradients(
             )
 
         return tree_unflatten(new_flat_grads)
-
-
-# TODO:Nastya
-# Draft for quantized version of average_gradients
-def average_gradients_quantized(
-    gradients: Any,
-    group: Optional[mx.distributed.Group] = None,
-    all_reduce_size: int = 32 * 1024**2,
-    communication_type: Optional[mx.Dtype] = None,
-    bits: int = 8,
-    group_size: int = 64,
-):
-    group = group or mx.distributed.init()
-    N = group.size()
-
-    if N == 1:
-        raise ValueError(
-            "This function is only useful for distributed training, please use average_gradients instead."
-        )
-
-    def _average(x):
-        if x.ndim == 1:
-            dt = x.dtype
-            x = x.astype(communication_type) if communication_type is not None else x
-            return mx.distributed.all_sum(x, stream=mx.cpu).astype(dt) / N
-        else:
-            ds = x.shape
-            qx, scales, biases = mx.quantize(x, group_size=group_size, bits=bits)
-            qx = mx.distributed.all_gather(qx, stream=mx.cpu)
-            # scales_biases = mx.distributed.all_gather(mx.concatenate([scales, biases]), stream=mx.cpu)
-            scales = mx.distributed.all_gather(scales, stream=mx.cpu)
-            biases = mx.distributed.all_gather(biases, stream=mx.cpu)
-            x = mx.dequantize(qx, scales, biases, group_size=group_size, bits=bits)
-
-            return x.reshape(N, *ds).mean(axis=0)
-
-    # if all_reduce_size <= 0:
-    return tree_map(_average, gradients)
-
-    # else:
-    #     flat_grads = tree_flatten(gradients)
-
-    #     if len(flat_grads) == 0:
-    #         return gradients
-
-    #     # Extract some info for the gradient
-    #     keys = [k for k, _ in flat_grads]
-    #     shapes = [v.shape for _, v in flat_grads]
-    #     sizes = [v.size for _, v in flat_grads]
-    #     dtypes = [v.dtype for _, v in flat_grads]
-
-    #     # We can't group them if they have mixed types
-    #     if not all(dt == dtypes[0] for dt in dtypes):
-    #         return average_gradients(gradients, group, 0, communication_type)
-
-    #     itemsize = (
-    #         communication_type.size
-    #         if communication_type is not None
-    #         else dtypes[0].size
-    #     )
-    #     grad_groups = _group_gradients(keys, sizes, all_reduce_size, itemsize)
-
-    #     # Concatenate-reduce-split
-    #     new_flat_grads = []
-    #     for grad_group in grad_groups:
-    #         indices = reduce(lambda x, y: x + [x[-1] + sizes[y]], grad_group, [0])
-    #         big_grad = mx.concatenate(
-    #             [flat_grads[i][1].reshape(-1) for i in grad_group]
-    #         )
-    #         big_grad = _average(big_grad)
-    #         big_grad = mx.split(big_grad, indices[1:-1])
-    #         new_flat_grads.extend(
-    #             (keys[j], big_grad[i].reshape(shapes[j]))
-    #             for i, j in enumerate(grad_group)
-    #         )
-
-    #     return tree_unflatten(new_flat_grads)
