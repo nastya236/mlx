@@ -75,7 +75,7 @@ def average_gradients(
     gradients: Any,
     group: Optional[mx.distributed.Group] = None,
     all_reduce_size: int = 32 * 1024**2,
-    communication_type: Optional[mx.Dtype] = None,
+    bits: int = 32,
     quantization: Optional[str] = None,
     quantization_config: Optional[Dict[str, Any]] = None,
 ) -> Any:
@@ -106,17 +106,24 @@ def average_gradients(
     def _average(x):
         dt = x.dtype
         # TODO: for now it will fail if all_reduce_size > 0 and quantization is not direct cast
-        if communication_type is not mx.float32:
+        if bits != 32:
             if quantization == "cast":
-                x = x.astype(communication_type)
+                x = x.astype(getattr(mx, f"float{bits}"))
                 return mx.distributed.all_sum(x, stream=mx.cpu).astype(dt) / N
             elif quantization == "affine":
                 if x.ndim > 1:
-                    qx, scales, biases = mx.quantize(x, **quantization_config)
+                    qx, scales, biases = mx.quantize(
+                        x, bits=bits, **quantization_config
+                    )
                     scales = mx.distributed.all_max(scales, stream=mx.cpu)
                     biases = mx.distributed.all_sum(biases, stream=mx.cpu) / N
                     qx = mx.distributed.all_sum(qx, stream=mx.cpu)
-                    return mx.dequantize(qx, scales, biases) / N
+                    return (
+                        mx.dequantize(
+                            qx, scales, biases, bits=bits, **quantization_config
+                        )
+                        / N
+                    )
                 else:
                     return mx.distributed.all_sum(x, stream=mx.cpu) / N
             else:
