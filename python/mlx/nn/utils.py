@@ -1,7 +1,7 @@
 # Copyright © 2023-2024 Apple Inc.
 
 from functools import reduce, wraps
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Dict, Optional, Union
 
 import mlx.core as mx
 
@@ -76,7 +76,9 @@ def average_gradients(
     group: Optional[mx.distributed.Group] = None,
     all_reduce_size: int = 32 * 1024**2,
     communication_type: Optional[mx.Dtype] = None,
-):
+    quantization: Optional[str] = None,
+    quantization_config: Optional[Dict[str, Any]] = None,
+) -> Any:
     """Average the gradients across the distributed processes in the passed group.
 
     This helper enables concatenating several gradients of small arrays to one
@@ -103,8 +105,24 @@ def average_gradients(
 
     def _average(x):
         dt = x.dtype
-        x = x.astype(communication_type) if communication_type is not None else x
-        return mx.distributed.all_sum(x, stream=mx.cpu).astype(dt) / N
+        # TODO: for now it will fail if all_reduce_size > 0 and quantization is not direct cast
+        if communication_type is not mx.float32:
+            if quantization == "cast":
+                x = x.astype(communication_type)
+                return mx.distributed.all_sum(x, stream=mx.cpu).astype(dt) / N
+            elif quantization == "affine":
+                if x.ndim > 1:
+                    qx, scales, biases = mx.quantize(x, **quantization_config)
+                    scales = mx.distributed.all_max(scales, stream=mx.cpu)
+                    biases = mx.distributed.all_sum(biases, stream=mx.cpu) / N
+                    qx = mx.distributed.all_sum(qx, stream=mx.cpu)
+                    return mx.dequantize(qx, scales, biases) / N
+                else:
+                    return mx.distributed.all_sum(x, stream=mx.cpu) / N
+            else:
+                raise ValueError(f"Unknown quantization method: {quantization}")
+        else:
+            return mx.distributed.all_sum(x, stream=mx.cpu) / N
 
     if all_reduce_size <= 0:
         return tree_map(_average, gradients)
