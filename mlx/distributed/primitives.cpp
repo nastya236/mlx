@@ -15,7 +15,12 @@ std::pair<std::vector<array>, std::vector<int>> AllReduce::vmap(
   switch (reduce_type_) {
     case Sum:
       return {{all_sum(inputs[0], group(), stream())}, axes};
+    case Max:
+      return {{all_max(inputs[0], group(), stream())}, axes};
+    case Min:
+      return {{all_min(inputs[0], group(), stream())}, axes};
     default:
+
       throw std::runtime_error("Only all reduce sum is supported for now");
   }
 }
@@ -27,6 +32,10 @@ std::vector<array> AllReduce::jvp(
   switch (reduce_type_) {
     case Sum:
       return {all_sum(tangents[0], group(), stream())};
+    case Max:
+      return {all_max(tangents[0], group(), stream())};
+    case Min:
+      return {all_min(tangents[0], group(), stream())};
     default:
       throw std::runtime_error("Only all reduce sum is supported for now");
   }
