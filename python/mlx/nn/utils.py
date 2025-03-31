@@ -7,6 +7,7 @@ import mlx.core as mx
 
 from ..utils import tree_flatten, tree_map, tree_unflatten
 from .layers.base import Module
+from .quantization import affine_dequantize, affine_quantize
 
 
 def value_and_grad(model: Module, fn: Callable):
@@ -112,17 +113,17 @@ def average_gradients(
                 return mx.distributed.all_sum(x, stream=mx.cpu).astype(dt) / N
             elif quantization == "affine":
                 if x.ndim > 1:
-                    qx, scales, biases = mx.quantize(
-                        x, bits=bits, **quantization_config
+                    # shared_scales, shared_biases
+                    q_w, scale, bias = affine_quantize(
+                        x, group_size=quantization_config["group_size"], bits=bits
                     )
-                    scales = mx.distributed.all_max(scales, stream=mx.cpu)
-                    biases = mx.distributed.all_sum(biases, stream=mx.cpu) / N
-                    qx = mx.distributed.all_sum(qx, stream=mx.cpu)
-                    return (
-                        mx.dequantize(
-                            qx, scales, biases, bits=bits, **quantization_config
-                        )
-                        / N
+                    q_w = mx.distributed.all_sum(q_w, stream=mx.cpu) / N
+                    x = affine_dequantize(
+                        q_w,
+                        scale,
+                        bias,
+                        group_size=quantization_config["group_size"],
+                        bits=bits,
                     )
                 else:
                     return mx.distributed.all_sum(x, stream=mx.cpu) / N
