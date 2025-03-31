@@ -125,6 +125,7 @@ def average_gradients(
                         group_size=quantization_config["group_size"],
                         bits=bits,
                     )
+                    return x.astype(dt)
                 else:
                     return mx.distributed.all_sum(x, stream=mx.cpu) / N
             else:
