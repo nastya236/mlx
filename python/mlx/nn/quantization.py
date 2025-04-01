@@ -32,7 +32,7 @@ def affine_quantize(w, group_size=64, bits=8):
     n_bins = (1 << bits) - 1
     zero = mx.array(0, dtype=mx.float32)
     q = mx.round((w - bias_reshaped) / scale_reshaped)
-    q = mx.clip(q, zero, n_bins).astype(mx.uint32)
+    q = mx.clip(q, zero, n_bins).astype(getattr(mx, f"int{bits}"))
 
     return q, scale, bias
 
