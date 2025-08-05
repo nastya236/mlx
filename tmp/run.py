@@ -44,7 +44,7 @@ def main():
         env = base_env.copy()
         env["MLX_RANK"] = str(rank)
 
-        cmd = [sys.executable, args.script] + args.script_args
+        cmd = [sys.executable, args.script]
         print(f"[rank {rank}/{world_size}] cmd:", " ".join(cmd))
         p = subprocess.Popen(cmd, env=env)
         procs.append(p)
