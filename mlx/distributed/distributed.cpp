@@ -47,6 +47,10 @@ class EmptyGroup : public GroupImpl {
     return 1;
   }
 
+  std::string backend() override {
+    return "any";
+  }
+
   std::shared_ptr<GroupImpl> split(int color, int key = -1) override {
     throw std::runtime_error("Cannot split the distributed group further.");
   }
@@ -91,6 +95,10 @@ int Group::rank() const {
 
 int Group::size() const {
   return group_->size();
+}
+
+int Group::backend() const {
+  return group_->backend();
 }
 
 Group Group::split(int color, int key /* = -1 */) const {

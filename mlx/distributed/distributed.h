@@ -3,7 +3,6 @@
 #pragma once
 
 #include <memory>
-
 #include "mlx/array.h"
 
 namespace mlx::core::distributed {
@@ -26,6 +25,7 @@ struct Group {
 
   int rank() const;
   int size() const;
+  std::string backend() const;
 
   /**
    * Split the group according to the provided color. Namely processes that use

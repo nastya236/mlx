@@ -627,6 +627,10 @@ class RingGroup : public GroupImpl {
     return size_;
   }
 
+  std::string backend() override {
+    return "ring";
+  }
+
   void all_sum(const array& input, array& output, Stream stream) override {
     SWITCH_TYPE(
         output, all_reduce<T, SumOp<T>>(input, output, stream, SumOp<T>()));
@@ -975,7 +979,6 @@ class RingGroup : public GroupImpl {
 
   int rank_;
   int size_;
-
   bool verbose_;
 
   ThreadPool pool_;
