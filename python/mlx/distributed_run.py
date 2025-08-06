@@ -433,7 +433,7 @@ def launch_nccl(parser, hosts, args, command):
     procs = []
     for rank in range(world_size):
         env = base_env.copy()
-        env["RANK"] = str(rank)
+        env["MLX_RANK"] = str(rank)
 
         p = Popen(command, env=env)
         procs.append(p)
