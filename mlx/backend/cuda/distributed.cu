@@ -12,7 +12,6 @@ namespace distributed {
 void AllReduce::eval_gpu(
     const std::vector<array>& inputs,
     std::vector<array>& outputs) {
-
   assert(inputs.size() == 1);
   assert(outputs.size() == 1);
 
@@ -20,7 +19,14 @@ void AllReduce::eval_gpu(
   auto& output = outputs[0];
 
   auto& encoder = cu::get_command_encoder(stream());
-  // output.set_data(allocator::malloc(output.nbytes()));
+
+  if input
+    .is_donatable() {
+      output.copy_shared_buffer(input);
+    }
+  else {
+    output.set_data(allocator::malloc(output.nbytes()));
+  }
 
   encoder.set_input_array(input);
   encoder.set_output_array(output);
@@ -30,7 +36,7 @@ void AllReduce::eval_gpu(
 
   switch (reduce_type_) {
     case Sum:
-      distributed::detail::all_sum(group(), input, input, s);
+      distributed::detail::all_sum(group(), input, output, s);
       break;
     case Max:
       distributed::detail::all_max(group(), input, output, s);
@@ -42,47 +48,6 @@ void AllReduce::eval_gpu(
       throw std::runtime_error(
           "Only all reduce sum, max, and min are supported.");
   }
-}
-
-void Send::eval_gpu(
-    const std::vector<array>& inputs,
-    std::vector<array>& outputs) {
-
-  assert(inputs.size() == 1);
-  assert(outputs.size() == 1);
-  auto& encoder = cu::get_command_encoder(stream());
-  output.set_data(allocator::malloc(output.nbytes()));
-
-  encoder.set_input_array(input);
-  encoder.set_output_array(output);
-
-  auto capture = encoder.capture_context();
-
-  distributed::detail::send(group(), inputs[0], dst_, stream());
-  outputs[0].copy_shared_buffer(inputs[0]);
-}
-
-void Recv::eval_gpu(
-    const std::vector<array>& inputs,
-    std::vector<array>& outputs) {
-  assert(inputs.size() == 0);
-  assert(outputs.size() == 1);
-  outputs[0].set_data(allocator::malloc(outputs[0].nbytes()));
-  distributed::detail::recv(group(), outputs[0], src_, stream());
-}
-
-void AllGather::eval_gpu(
-    const std::vector<array>& inputs,
-    std::vector<array>& outputs) {
-
-  assert(inputs.size() == 1);
-  assert(outputs.size() == 1);
-
-  auto& input = inputs[0];
-  auto& output = outputs[0];
-
-  output.copy_shared_buffer(input);
-  distributed::detail::all_gather(group(), input, output, stream());
 }
 } // namespace distributed
 } // namespace mlx::core

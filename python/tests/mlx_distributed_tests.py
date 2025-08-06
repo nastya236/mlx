@@ -26,24 +26,24 @@ class MLXDistributedCommonTestCase(mlx_tests.MLXTestCase):
             return original_all_sum(x, **kwargs)
 
         mx.distributed.all_sum = new_all_sum
-
+        stream = mx.gpu if mx.distributed.group().backend() == "nccl" else mx.cpu
         try:
             grads = [mx.ones(10) for i in range(10)]
-            new_grads = average_gradients(grads)
+            new_grads = average_gradients(grads, stream=stream)
             mx.eval(new_grads)
             self.assertEqual(len(new_grads), 10)
             self.assertTrue(all(mx.all(g == 1) for g in new_grads))
             self.assertEqual(n_calls, 1)
 
             n_calls = 0
-            new_grads = average_gradients(grads, all_reduce_size=4 * 50)
+            new_grads = average_gradients(grads, all_reduce_size=4 * 50, stream=stream)
             mx.eval(new_grads)
             self.assertEqual(len(new_grads), 10)
             self.assertTrue(all(mx.all(g == 1) for g in new_grads))
             self.assertEqual(n_calls, 2)
 
             n_calls = 0
-            new_grads = average_gradients(grads, all_reduce_size=0)
+            new_grads = average_gradients(grads, all_reduce_size=0, stream=stream)
             mx.eval(new_grads)
             self.assertEqual(len(new_grads), 10)
             self.assertTrue(all(mx.all(g == 1) for g in new_grads))
@@ -52,7 +52,10 @@ class MLXDistributedCommonTestCase(mlx_tests.MLXTestCase):
             n_calls = 0
             xtype = mx.float16
             new_grads = average_gradients(
-                grads, all_reduce_size=2 * 50, communication_type=mx.float16
+                grads,
+                all_reduce_size=2 * 50,
+                communication_type=mx.float16,
+                stream=stream,
             )
             mx.eval(new_grads)
             self.assertEqual(len(new_grads), 10)
