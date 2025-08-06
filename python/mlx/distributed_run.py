@@ -767,7 +767,7 @@ def main():
     parser.add_argument("--hostfile", help="The file containing the hosts")
     parser.add_argument(
         "--backend",
-        choices=["ring", "mpi"],
+        choices=["ring", "mpi", "nccl"],
         default="ring",
         help="Which distributed backend to launch",
     )
