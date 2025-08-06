@@ -12,8 +12,7 @@ namespace distributed {
 void AllReduce::eval_gpu(
     const std::vector<array>& inputs,
     std::vector<array>& outputs) {
-  // Here I assume for now that in is donatable and contiguous.
-  // TODO
+
   assert(inputs.size() == 1);
   assert(outputs.size() == 1);
 
@@ -21,7 +20,7 @@ void AllReduce::eval_gpu(
   auto& output = outputs[0];
 
   auto& encoder = cu::get_command_encoder(stream());
-  output.set_data(allocator::malloc(output.nbytes()));
+  // output.set_data(allocator::malloc(output.nbytes()));
 
   encoder.set_input_array(input);
   encoder.set_output_array(output);
@@ -31,7 +30,7 @@ void AllReduce::eval_gpu(
 
   switch (reduce_type_) {
     case Sum:
-      distributed::detail::all_sum(group(), input, output, s);
+      distributed::detail::all_sum(group(), input, input, s);
       break;
     case Max:
       distributed::detail::all_max(group(), input, output, s);
@@ -48,11 +47,16 @@ void AllReduce::eval_gpu(
 void Send::eval_gpu(
     const std::vector<array>& inputs,
     std::vector<array>& outputs) {
-  // Here FOR NOW I assume that it is always row_contigious
-  // because not sure how to copy correctly
-  // TODO
+
   assert(inputs.size() == 1);
   assert(outputs.size() == 1);
+  auto& encoder = cu::get_command_encoder(stream());
+  output.set_data(allocator::malloc(output.nbytes()));
+
+  encoder.set_input_array(input);
+  encoder.set_output_array(output);
+
+  auto capture = encoder.capture_context();
 
   distributed::detail::send(group(), inputs[0], dst_, stream());
   outputs[0].copy_shared_buffer(inputs[0]);
@@ -70,9 +74,7 @@ void Recv::eval_gpu(
 void AllGather::eval_gpu(
     const std::vector<array>& inputs,
     std::vector<array>& outputs) {
-  // Here FOR NOW I assume that it is always row_contigious
-  // because not sure how to copy correctly
-  // TODO
+
   assert(inputs.size() == 1);
   assert(outputs.size() == 1);
 
