@@ -15,6 +15,7 @@ class GroupImpl {
 
   virtual int rank() = 0;
   virtual int size() = 0;
+  virtual std::string backend() = 0;
   virtual std::shared_ptr<GroupImpl> split(int color, int key = -1) = 0;
 
   virtual void all_sum(const array& input, array& output, Stream stream) = 0;
