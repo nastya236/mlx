@@ -20,11 +20,9 @@ void AllReduce::eval_gpu(
 
   auto& encoder = cu::get_command_encoder(stream());
 
-  if input
-    .is_donatable() {
-      output.copy_shared_buffer(input);
-    }
-  else {
+  if (input.is_donatable()) {
+    output.copy_shared_buffer(input);
+  } else {
     output.set_data(allocator::malloc(output.nbytes()));
   }
 
