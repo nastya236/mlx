@@ -695,7 +695,7 @@ def distributed_config():
     )
     parser.add_argument(
         "--backend",
-        choices=["ring", "mpi"],
+        choices=["ring", "mpi", "nccl"],
         default="ring",
         help="Which distributed backend to configure",
     )
