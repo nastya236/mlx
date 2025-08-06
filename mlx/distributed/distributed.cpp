@@ -97,7 +97,7 @@ int Group::size() const {
   return group_->size();
 }
 
-int Group::backend() const {
+std::string Group::backend() const {
   return group_->backend();
 }
 
