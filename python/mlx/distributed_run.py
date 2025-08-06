@@ -435,8 +435,7 @@ def launch_nccl(parser, hosts, args, command):
         env = base_env.copy()
         env["RANK"] = str(rank)
 
-        cmd = [sys.executable, *command]
-        p = Popen(cmd, env=env)
+        p = Popen(command, env=env)
         procs.append(p)
 
     for p in procs:
