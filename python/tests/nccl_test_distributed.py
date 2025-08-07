@@ -22,15 +22,15 @@ class TestNCCLDistributed(mlx_tests.MLXTestCase):
             # (mx.uint8, 0),
             # (mx.int32, 0),
             # (mx.uint32, 0),
-            # (mx.float32, 1e-6),
-            # (mx.float16, 5e-3),
+            (mx.float32, 1e-6),
+            (mx.float16, 5e-3),
             (mx.bfloat16, 1e-1),
         ]
         sizes = [
-            (5,),
-            # (10,),
-            # (1024,),
-            # (1024, 1024),
+            (7,),
+            (10,),
+            (1024,),
+            (1024, 1024),
         ]
         key = mx.random.key(0)
 
