@@ -1,5 +1,6 @@
 # Copyright © 2024 Apple Inc.
 
+from time import sleep
 import unittest
 
 import mlx.core as mx
@@ -53,10 +54,10 @@ class TestNCCLDistributed(mlx_tests.MLXTestCase):
                 # self.assertLessEqual(maxrelerror, rtol)
 
                 # All max
+                sleep(0.1)  # Ensure all ranks are synchronized
                 print(f"Testing all_max with dtype {dt} and shape {sh}")
                 print(f"Rank {world.rank()} x: {x[world.rank()]}")
                 y = mx.distributed.all_max(x[world.rank()])
-                mx.eval(y)
                 print(f"Rank {world.rank()} y: {y}")
                 
                 z = x.max(0)
