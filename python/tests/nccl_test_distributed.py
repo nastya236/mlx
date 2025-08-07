@@ -18,16 +18,16 @@ class TestNCCLDistributed(mlx_tests.MLXTestCase):
     def test_all_reduce(self):
         world = mx.distributed.init()
         dtypes = [
-            # (mx.int8, 0),
-            # (mx.uint8, 0),
-            # (mx.int32, 0),
-            # (mx.uint32, 0),
+            (mx.int8, 0),
+            (mx.uint8, 0),
+            (mx.int32, 0),
+            (mx.uint32, 0),
             (mx.float32, 1e-6),
             (mx.float16, 5e-3),
             (mx.bfloat16, 1e-1),
         ]
         sizes = [
-            # (7,),
+            (7,),
             (10,),
             (1024,),
             (1024, 1024),
@@ -41,28 +41,27 @@ class TestNCCLDistributed(mlx_tests.MLXTestCase):
                 ).astype(dt)
 
                 # All sum
-                # y = mx.distributed.all_sum(x[world.rank()])
-                # z = x.sum(0)
-                # maxrelerror = (y - z).abs()
-                # if rtol > 0:
-                #     maxrelerror /= z.abs()
-                # maxrelerror = maxrelerror.max()
-                # self.assertLessEqual(maxrelerror, rtol)
+                y = mx.distributed.all_sum(x[world.rank()])
+                z = x.sum(0)
+                maxrelerror = (y - z).abs()
+                if rtol > 0:
+                    maxrelerror /= z.abs()
+                maxrelerror = maxrelerror.max()
+                self.assertLessEqual(maxrelerror, rtol)
 
                 # All max
                 print(f"Testing all_max with dtype {dt} and shape {sh}")
-
                 y = mx.distributed.all_max(x[world.rank()])
-                print(f"y: {y}")
+                print(f"Rank {world.rank()} y: {y}")
                 
                 z = x.max(0)
                 print(f"z: {z}")
                 self.assertTrue(mx.all(y == z))
 
                 # All min
-                # y = mx.distributed.all_min(x[world.rank()])
-                # z = x.min(0)
-                # self.assertTrue(mx.all(y == z))
+                y = mx.distributed.all_min(x[world.rank()])
+                z = x.min(0)
+                self.assertTrue(mx.all(y == z))
 
 
 if __name__ == "__main__":
