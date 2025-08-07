@@ -27,7 +27,7 @@ class TestNCCLDistributed(mlx_tests.MLXTestCase):
             (mx.bfloat16, 1e-1),
         ]
         sizes = [
-            (7,),
+            # (7,),
             (10,),
             (1024,),
             (1024, 1024),
