@@ -41,7 +41,6 @@ class TestNCCLDistributed(mlx_tests.MLXTestCase):
                 ).astype(dt)
 
                 # All sum
-                print(f"Testing all_sum with dtype {dt} and shape {sh}")
                 y = mx.distributed.all_sum(x[world.rank()])
                 z = x.sum(0)
                 maxrelerror = (y - z).abs()
@@ -51,9 +50,11 @@ class TestNCCLDistributed(mlx_tests.MLXTestCase):
                 self.assertLessEqual(maxrelerror, rtol)
 
                 # All max
-                # y = mx.distributed.all_max(x[world.rank()])
-                # z = x.max(0)
-                # self.assertTrue(mx.all(y == z))
+                print(f"Testing all_max with dtype {dt} and shape {sh}")
+
+                y = mx.distributed.all_max(x[world.rank()])
+                z = x.max(0)
+                self.assertTrue(mx.all(y == z))
 
                 # All min
                 # y = mx.distributed.all_min(x[world.rank()])
