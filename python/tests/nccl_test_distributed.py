@@ -7,7 +7,7 @@ import mlx_distributed_tests
 import mlx_tests
 
 
-class TestNCCLDistributed(mlx_distributed_tests.MLXDistributedCommonTestCase):
+class TestNCCLDistributed():
     @classmethod
     def setUpClass(cls):
         world = mx.distributed.init(strict=True, backend="nccl")
