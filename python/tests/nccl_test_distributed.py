@@ -8,7 +8,7 @@ import mlx_distributed_tests
 import mlx_tests
 
 
-class TestNCCLDistributed(mlx_tests.MLXTestCase):
+class TestNCCLDistributed(mlx_distributed_tests.MLXDistributedCommonTestCase):
     @classmethod
     def setUpClass(cls):
         world = mx.distributed.init(strict=True, backend="nccl")
@@ -42,35 +42,13 @@ class TestNCCLDistributed(mlx_tests.MLXTestCase):
                 ).astype(dt)
 
                 # All sum
-                print(f"Rank {world.rank()} x: {x[world.rank()]}")
                 y = mx.distributed.all_sum(x[world.rank()])
-                print(f"Rank {world.rank()} y: {y}")
                 z = x.sum(0)
-                print(f"Rank {world.rank()} z: {z}")
                 maxrelerror = (y - z).abs()
                 if rtol > 0:
                     maxrelerror /= z.abs()
                 maxrelerror = maxrelerror.max()
                 self.assertLessEqual(maxrelerror, rtol)
-
-                # All max
-                # print(f"Testing all_max with dtype {dt} and shape {sh}")
-                # print(f"Rank {world.rank()} x: {x[world.rank()]}")
-                # y = mx.distributed.all_max(x[world.rank()])
-                # print(f"Rank {world.rank()} y: {y}")
-                
-                # z = x.max(0)
-                # print(f"Rank {world.rank()} z: {z}")
-                # self.assertTrue(mx.all(y == z))
-
-                # All min
-                # print(f"Testing all_min with dtype {dt} and shape {sh}")
-                # print(f"Rank {world.rank()} x: {x[world.rank()]}")
-                # y = mx.distributed.all_min(x[world.rank()])
-                # z = x.min(0)
-                # print(f"Rank {world.rank()} y: {y}")
-                # self.assertTrue(mx.all(y == z))
-
 
 if __name__ == "__main__":
     mlx_tests.MLXTestRunner()
