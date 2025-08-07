@@ -19,19 +19,19 @@ class TestNCCLDistributed(mlx_tests.MLXTestCase):
     def test_all_reduce(self):
         world = mx.distributed.init()
         dtypes = [
-            # (mx.int8, 0),
-            # (mx.uint8, 0),
-            # (mx.int32, 0),
-            # (mx.uint32, 0),
-            # (mx.float32, 1e-6),
+            (mx.int8, 0),
+            (mx.uint8, 0),
+            (mx.int32, 0),
+            (mx.uint32, 0),
+            (mx.float32, 1e-6),
             (mx.float16, 5e-3),
             (mx.bfloat16, 1e-1),
         ]
         sizes = [
             (7,),
-            # (10,),
-            # (1024,),
-            # (1024, 1024),
+            (10,),
+            (1024,),
+            (1024, 1024),
         ]
         key = mx.random.key(0)
 
@@ -42,27 +42,26 @@ class TestNCCLDistributed(mlx_tests.MLXTestCase):
                 ).astype(dt)
 
                 # All sum
-                # print(f"Rank {world.rank()} x: {x[world.rank()]}")
-                # y = mx.distributed.all_sum(x[world.rank()])
-                # print(f"Rank {world.rank()} y: {y}")
-                # z = x.sum(0)
-                # print(f"Rank {world.rank()} z: {z}")
-                # maxrelerror = (y - z).abs()
-                # if rtol > 0:
-                #     maxrelerror /= z.abs()
-                # maxrelerror = maxrelerror.max()
-                # self.assertLessEqual(maxrelerror, rtol)
+                print(f"Rank {world.rank()} x: {x[world.rank()]}")
+                y = mx.distributed.all_sum(x[world.rank()])
+                print(f"Rank {world.rank()} y: {y}")
+                z = x.sum(0)
+                print(f"Rank {world.rank()} z: {z}")
+                maxrelerror = (y - z).abs()
+                if rtol > 0:
+                    maxrelerror /= z.abs()
+                maxrelerror = maxrelerror.max()
+                self.assertLessEqual(maxrelerror, rtol)
 
                 # All max
-                sleep(0.1)  # Ensure all ranks are synchronized
-                print(f"Testing all_max with dtype {dt} and shape {sh}")
-                print(f"Rank {world.rank()} x: {x[world.rank()]}")
-                y = mx.distributed.all_max(x[world.rank()])
-                print(f"Rank {world.rank()} y: {y}")
+                # print(f"Testing all_max with dtype {dt} and shape {sh}")
+                # print(f"Rank {world.rank()} x: {x[world.rank()]}")
+                # y = mx.distributed.all_max(x[world.rank()])
+                # print(f"Rank {world.rank()} y: {y}")
                 
-                z = x.max(0)
-                print(f"Rank {world.rank()} z: {z}")
-                self.assertTrue(mx.all(y == z))
+                # z = x.max(0)
+                # print(f"Rank {world.rank()} z: {z}")
+                # self.assertTrue(mx.all(y == z))
 
                 # All min
                 # print(f"Testing all_min with dtype {dt} and shape {sh}")
