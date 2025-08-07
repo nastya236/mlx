@@ -56,6 +56,7 @@ class TestNCCLDistributed(mlx_tests.MLXTestCase):
                 print(f"Testing all_max with dtype {dt} and shape {sh}")
                 print(f"Rank {world.rank()} x: {x[world.rank()]}")
                 y = mx.distributed.all_max(x[world.rank()])
+                mx.eval(y)
                 print(f"Rank {world.rank()} y: {y}")
                 
                 z = x.max(0)
