@@ -106,7 +106,7 @@ class MLXDistributedCommonTestCase(mlx_tests.MLXTestCase):
         y = lin(x)
         y1 = slin1(x)
         y2 = slin2(x[part])
-        print(y, y2)
+        print(f'Rank {world.rank()} y: {y.sum()}, y1: {y1.sum()}, y2: {y2.sum()}')
         self.assertTrue(mx.allclose(y, y2, atol=1e-6, rtol=1e-4))
         self.assertTrue(mx.allclose(y[part], y1))
 
