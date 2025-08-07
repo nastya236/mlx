@@ -23,7 +23,7 @@ class TestNCCLDistributed(mlx_tests.MLXTestCase):
             # (mx.int32, 0),
             # (mx.uint32, 0),
             # (mx.float32, 1e-6),
-            # (mx.float16, 5e-3),
+            (mx.float16, 5e-3),
             (mx.bfloat16, 1e-1),
         ]
         sizes = [
