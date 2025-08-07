@@ -41,8 +41,11 @@ class TestNCCLDistributed(mlx_tests.MLXTestCase):
                 ).astype(dt)
 
                 # All sum
+                print(f"Rank {world.rank()} x: {x[world.rank()]}")
                 y = mx.distributed.all_sum(x[world.rank()])
+                print(f"Rank {world.rank()} y: {y}")
                 z = x.sum(0)
+                print(f"Rank {world.rank()} z: {z}")
                 maxrelerror = (y - z).abs()
                 if rtol > 0:
                     maxrelerror /= z.abs()
