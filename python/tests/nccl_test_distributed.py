@@ -13,7 +13,7 @@ class TestNCCLDistributed(mlx_tests.MLXTestCase):
         world = mx.distributed.init(strict=True, backend="nccl")
         rank = world.rank()
         mx.set_default_device(mx.Device(mx.gpu, rank % 8))
-
+        print(f"Rank {rank} set to device {mx.get_default_device()}")
     def test_all_reduce(self):
         world = mx.distributed.init()
         dtypes = [
