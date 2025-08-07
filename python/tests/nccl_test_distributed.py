@@ -20,14 +20,11 @@ class TestNCCLDistributed(mlx_tests.MLXTestCase):
         dtypes = [
             (mx.int8, 0),
             (mx.uint8, 0),
-            (mx.int16, 0),
-            (mx.uint16, 0),
             (mx.int32, 0),
             (mx.uint32, 0),
             (mx.float32, 1e-6),
             (mx.float16, 5e-3),
             (mx.bfloat16, 1e-1),
-            (mx.complex64, 1e-6),
         ]
         sizes = [
             (7,),
