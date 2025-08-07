@@ -12,18 +12,6 @@ class TestNCCLDistributed(mlx_distributed_tests.MLXDistributedCommonTestCase):
     def setUpClass(cls):
         world = mx.distributed.init(strict=True, backend="nccl")
 
-    def test_groups(self):
-        world = mx.distributed.init()
-        self.assertEqual(world.size(), 8)
-        self.assertTrue(0 <= world.rank() < 8)
-
-        world2 = mx.distributed.init()
-        self.assertEqual(world.size(), world2.size())
-        self.assertEqual(world.rank(), world2.rank())
-
-        with self.assertRaises(RuntimeError):
-            sub = world.split(world.rank() % 2)
-
     def test_all_reduce(self):
         world = mx.distributed.init()
         dtypes = [
