@@ -6,9 +6,6 @@ import mlx_tests
 from mlx.nn.layers.distributed import shard_inplace, shard_linear
 from mlx.nn.utils import average_gradients
 
-ATOL = 1e-4
-RTOL = 1e-4
-
 
 class TestNCCLDistributed(mlx_tests.MLXTestCase):
     @classmethod
@@ -146,8 +143,8 @@ class TestNCCLDistributed(mlx_tests.MLXTestCase):
         y = lin(x)
         y1 = slin1(x)
         y2 = slin2(x[part])
-        self.assertTrue(mx.allclose(y, y2, atol=ATOL, rtol=RTOL))
-        self.assertTrue(mx.allclose(y[part], y1, atol=ATOL, rtol=RTOL))
+        self.assertTrue(mx.allclose(y, y2, atol=1e-4, rtol=1e-4))
+        self.assertTrue(mx.allclose(y[part], y1, atol=1e-4, rtol=1e-4))
 
         # Check the backward works as expected
         def dummy_loss(model, x, y):
