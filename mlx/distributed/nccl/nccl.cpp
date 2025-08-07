@@ -280,52 +280,23 @@ class NCCLGroup : public GroupImpl {
   }
 
   void all_gather(const array& input, array& output, Stream stream) override {
-    detail::dispatch_dtype(input, [&](auto type_tag, ncclDataType_t dt) {
-      auto& encoder = cu::get_command_encoder(stream);
-
-      using T = typename decltype(type_tag)::type;
-      CHECK_NCCL(ncclAllGather(
-          input.data<T>(),
-          output.data<T>(),
-          input.size(),
-          dt,
-          comm_,
-          encoder.stream()));
-    });
+    throw std::runtime_error("[nccl] All gather not supported in NCCL backend.");
   }
 
   void send(const array& input, int dst, Stream stream) override {
-    detail::dispatch_dtype(input, [&](auto type_tag, ncclDataType_t dt) {
-      auto& encoder = cu::get_command_encoder(stream);
-
-      using T = typename decltype(type_tag)::type;
-      CHECK_NCCL(ncclSend(
-          input.data<T>(), input.size(), dt, dst, comm_, encoder.stream()));
-    });
+    trhow std::runtime_error("[nccl] Send not supported in NCCL backend.");
   }
 
   void recv(array& output, int src, Stream stream) override {
-    detail::dispatch_dtype(output, [&](auto type_tag, ncclDataType_t dt) {
-      using T = typename decltype(type_tag)::type;
-      auto& encoder = cu::get_command_encoder(stream);
-
-      CHECK_NCCL(ncclRecv(
-          output.data<T>(), output.size(), dt, src, comm_, encoder.stream()));
-    });
+    throw std::runtime_error("[nccl] Recv not supported in NCCL backend.");
   }
 
   void all_max(const array& input, array& output, Stream stream) override {
-    detail::dispatch_dtype(input, [&](auto type_tag, ncclDataType_t dt) {
-      using T = typename decltype(type_tag)::type;
-      all_reduce_impl<T>(input, output, stream, dt, ncclMax);
-    });
+    throw std::runtime_error("[nccl] All max not supported in NCCL backend.");
   }
 
   void all_min(const array& input, array& output, Stream stream) override {
-    detail::dispatch_dtype(input, [&](auto type_tag, ncclDataType_t dt) {
-      using T = typename decltype(type_tag)::type;
-      all_reduce_impl<T>(input, output, stream, dt, ncclMin);
-    });
+    throw std::runtime_error("[nccl] All min not supported in NCCL backend.");
   }
 
   template <typename T>

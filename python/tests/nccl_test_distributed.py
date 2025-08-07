@@ -1,7 +1,6 @@
 # Copyright © 2024 Apple Inc.
 import mlx.core as mx
 import mlx.nn as nn
-import mlx_distributed_tests
 import mlx_tests
 from mlx.nn.layers.distributed import shard_inplace, shard_linear
 from mlx.nn.utils import average_gradients
