@@ -280,7 +280,8 @@ class NCCLGroup : public GroupImpl {
   }
 
   void all_gather(const array& input, array& output, Stream stream) override {
-    throw std::runtime_error("[nccl] All gather not supported in NCCL backend.");
+    throw std::runtime_error(
+        "[nccl] All gather not supported in NCCL backend.");
   }
 
   void send(const array& input, int dst, Stream stream) override {

@@ -443,15 +443,16 @@ def launch_nccl(parser, hosts, args, command):
             ret = p.wait()
             if ret != 0:
                 raise RuntimeError(f"Rank process exited with {ret}")
-            
+
     except (RuntimeError, KeyboardInterrupt) as err:
         for p in procs:
-            if p.poll() is None:       
+            if p.poll() is None:
                 try:
                     p.kill()
                 except Exception:
                     pass
         raise
+
 
 def check_ssh_connections(hosts):
     results = [False] * len(hosts)
