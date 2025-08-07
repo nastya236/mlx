@@ -53,7 +53,10 @@ class TestNCCLDistributed(mlx_tests.MLXTestCase):
                 print(f"Testing all_max with dtype {dt} and shape {sh}")
 
                 y = mx.distributed.all_max(x[world.rank()])
+                print(f"y: {y}")
+                
                 z = x.max(0)
+                print(f"z: {z}")
                 self.assertTrue(mx.all(y == z))
 
                 # All min
