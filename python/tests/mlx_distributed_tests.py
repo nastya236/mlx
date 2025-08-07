@@ -116,6 +116,7 @@ class MLXDistributedCommonTestCase(mlx_tests.MLXTestCase):
         y = qlin(x)
         y1 = slin1(x)
         y2 = slin2(x[part])
+        print(f'1: {mx.allclose(y, y2, atol=1e-6, rtol=1e-4)}')
         self.assertTrue(mx.allclose(y, y2, atol=1e-6, rtol=1e-4))
         self.assertTrue(mx.allclose(y[part], y1))
 
@@ -149,6 +150,15 @@ class MLXDistributedCommonTestCase(mlx_tests.MLXTestCase):
         part = slice(
             world.rank() * 128 // world.size(), (world.rank() + 1) * 128 // world.size()
         )
+        print(f'2 : {mx.allclose(l1, l2)}')
+        print(f'3 : {mx.allclose(g1["layers"][0]["weight"][part], g2["layers"][0]["weight"], atol=1e-6, rtol=1e-4)}')
+        print(f'4 : {mx.allclose(g1["layers"][2]["weight"][part], g2["layers"][2]["weight"], atol=1e-6, rtol=1e-4)}')
+        print(f'5 : {mx.allclose(g1["layers"][1]["weight"][:, part], g2["layers"][1]["weight"], atol=1e-6, rtol=1e-4)}')
+        print(f'6 : {mx.allclose(g1["layers"][3]["weight"][:, part], g2["layers"][3]["weight"], atol=1e-6, rtol=1e-4)}')
+        print(f'7 : {mx.allclose(g1["layers"][0]["bias"][part], g2["layers"][0]["bias"], atol=1e-6, rtol=1e-4)}')
+        print(f'8 : {mx.allclose(g1["layers"][2]["bias"][part], g2["layers"][2]["bias"], atol=1e-6, rtol=1e-4)}')
+        print(f'9 : {mx.allclose(g1["layers"][1]["bias"], g2["layers"][1]["bias"], atol=1e-6, rtol=1e-4)}')
+        print(f'10 : {mx.allclose(g1["layers"][3]["bias"], g2["layers"][3]["bias"], atol=1e-6, rtol=1e-4)}')
         self.assertTrue(mx.allclose(l1, l2))
         self.assertTrue(
             mx.allclose(
