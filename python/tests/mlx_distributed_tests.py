@@ -26,7 +26,7 @@ class MLXDistributedCommonTestCase(mlx_tests.MLXTestCase):
             return original_all_sum(x, **kwargs)
 
         mx.distributed.all_sum = new_all_sum
-        stream = mx.gpu if mx.distributed.group().backend() == "nccl" else mx.cpu
+        stream = mx.gpu if mx.distributed.init().backend() == "nccl" else mx.cpu
         try:
             grads = [mx.ones(10) for i in range(10)]
             new_grads = average_gradients(grads, stream=stream)

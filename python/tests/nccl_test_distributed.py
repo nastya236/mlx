@@ -1,8 +1,4 @@
 # Copyright © 2024 Apple Inc.
-
-from time import sleep
-import unittest
-
 import mlx.core as mx
 import mlx_distributed_tests
 import mlx_tests
@@ -49,6 +45,7 @@ class TestNCCLDistributed(mlx_distributed_tests.MLXDistributedCommonTestCase):
                     maxrelerror /= z.abs()
                 maxrelerror = maxrelerror.max()
                 self.assertLessEqual(maxrelerror, rtol)
+
 
 if __name__ == "__main__":
     mlx_tests.MLXTestRunner()
