@@ -268,10 +268,6 @@ class NCCLGroup : public GroupImpl {
     return size_;
   }
 
-  std::string backend() override {
-    return "nccl";
-  }
-
   void all_sum(const array& input, array& output, Stream stream) override {
     detail::dispatch_dtype(input, [&](auto type_tag, ncclDataType_t dt) {
       using T = typename decltype(type_tag)::type;

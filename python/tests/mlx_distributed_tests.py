@@ -8,8 +8,6 @@ import mlx_tests
 from mlx.nn.layers.distributed import shard_inplace, shard_linear
 from mlx.nn.utils import average_gradients
 
-ATOL = 1e-4
-RTOL = 1e-4
 
 class MLXDistributedCommonTestCase(mlx_tests.MLXTestCase):
     def test_average_gradients(self):
@@ -28,24 +26,24 @@ class MLXDistributedCommonTestCase(mlx_tests.MLXTestCase):
             return original_all_sum(x, **kwargs)
 
         mx.distributed.all_sum = new_all_sum
-        stream = mx.gpu if mx.distributed.init().backend() == "nccl" else mx.cpu
+
         try:
             grads = [mx.ones(10) for i in range(10)]
-            new_grads = average_gradients(grads, stream=stream)
+            new_grads = average_gradients(grads)
             mx.eval(new_grads)
             self.assertEqual(len(new_grads), 10)
             self.assertTrue(all(mx.all(g == 1) for g in new_grads))
             self.assertEqual(n_calls, 1)
 
             n_calls = 0
-            new_grads = average_gradients(grads, all_reduce_size=4 * 50, stream=stream)
+            new_grads = average_gradients(grads, all_reduce_size=4 * 50)
             mx.eval(new_grads)
             self.assertEqual(len(new_grads), 10)
             self.assertTrue(all(mx.all(g == 1) for g in new_grads))
             self.assertEqual(n_calls, 2)
 
             n_calls = 0
-            new_grads = average_gradients(grads, all_reduce_size=0, stream=stream)
+            new_grads = average_gradients(grads, all_reduce_size=0)
             mx.eval(new_grads)
             self.assertEqual(len(new_grads), 10)
             self.assertTrue(all(mx.all(g == 1) for g in new_grads))
@@ -54,10 +52,7 @@ class MLXDistributedCommonTestCase(mlx_tests.MLXTestCase):
             n_calls = 0
             xtype = mx.float16
             new_grads = average_gradients(
-                grads,
-                all_reduce_size=2 * 50,
-                communication_type=mx.float16,
-                stream=stream,
+                grads, all_reduce_size=2 * 50, communication_type=mx.float16
             )
             mx.eval(new_grads)
             self.assertEqual(len(new_grads), 10)
@@ -108,8 +103,8 @@ class MLXDistributedCommonTestCase(mlx_tests.MLXTestCase):
         y = lin(x)
         y1 = slin1(x)
         y2 = slin2(x[part])
-        self.assertTrue(mx.allclose(y, y2, atol=ATOL, rtol=RTOL))
-        self.assertTrue(mx.allclose(y[part], y1, atol=ATOL, rtol=RTOL))
+        self.assertTrue(mx.allclose(y, y2, atol=1e-6, rtol=1e-4))
+        self.assertTrue(mx.allclose(y[part], y1))
 
         # And their quant versions
         qlin = lin.to_quantized()
@@ -118,8 +113,7 @@ class MLXDistributedCommonTestCase(mlx_tests.MLXTestCase):
         y = qlin(x)
         y1 = slin1(x)
         y2 = slin2(x[part])
-        print(f'1: {mx.allclose(y, y2, atol=1e-4, rtol=1e-4)}')
-        self.assertTrue(mx.allclose(y, y2, atol=1e-4, rtol=1e-4))
+        self.assertTrue(mx.allclose(y, y2, atol=1e-6, rtol=1e-4))
         self.assertTrue(mx.allclose(y[part], y1))
 
         # Check the backward works as expected
@@ -152,15 +146,6 @@ class MLXDistributedCommonTestCase(mlx_tests.MLXTestCase):
         part = slice(
             world.rank() * 128 // world.size(), (world.rank() + 1) * 128 // world.size()
         )
-        print(f'2 : {mx.allclose(l1, l2)}')
-        print(f'3 : {mx.allclose(g1["layers"][0]["weight"][part], g2["layers"][0]["weight"], atol=1e-6, rtol=1e-4)}')
-        print(f'4 : {mx.allclose(g1["layers"][2]["weight"][part], g2["layers"][2]["weight"], atol=1e-6, rtol=1e-4)}')
-        print(f'5 : {mx.allclose(g1["layers"][1]["weight"][:, part], g2["layers"][1]["weight"], atol=1e-6, rtol=1e-4)}')
-        print(f'6 : {mx.allclose(g1["layers"][3]["weight"][:, part], g2["layers"][3]["weight"], atol=1e-6, rtol=1e-4)}')
-        print(f'7 : {mx.allclose(g1["layers"][0]["bias"][part], g2["layers"][0]["bias"], atol=1e-6, rtol=1e-4)}')
-        print(f'8 : {mx.allclose(g1["layers"][2]["bias"][part], g2["layers"][2]["bias"], atol=1e-6, rtol=1e-4)}')
-        print(f'9 : {mx.allclose(g1["layers"][1]["bias"], g2["layers"][1]["bias"], atol=1e-6, rtol=1e-4)}')
-        print(f'10 : {mx.allclose(g1["layers"][3]["bias"], g2["layers"][3]["bias"], atol=1e-6, rtol=1e-4)}')
         self.assertTrue(mx.allclose(l1, l2))
         self.assertTrue(
             mx.allclose(

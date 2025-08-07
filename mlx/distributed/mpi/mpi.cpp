@@ -363,10 +363,6 @@ class MPIGroup : public GroupImpl {
     return size_;
   }
 
-  std::string backend() override {
-    return "mpi";
-  }
-
   std::shared_ptr<GroupImpl> split(int color, int key = -1) override {
     key = (key < 0) ? rank() : key;
 
