@@ -431,18 +431,27 @@ def launch_nccl(parser, hosts, args, command):
         }
     )
     procs = []
-    for rank in range(world_size):
-        env = base_env.copy()
-        env["MLX_RANK"] = str(rank)
+    try:
+        for rank in range(world_size):
+            env = base_env.copy()
+            env["MLX_RANK"] = str(rank)
 
-        p = Popen(command, env=env)
-        procs.append(p)
+            p = Popen(command, env=env)
+            procs.append(p)
 
-    for p in procs:
-        ret = p.wait()
-        if ret != 0:
-            raise RuntimeError(f"Rank process exited with {ret}")
-
+        for p in procs:
+            ret = p.wait()
+            if ret != 0:
+                raise RuntimeError(f"Rank process exited with {ret}")
+            
+    except (RuntimeError, KeyboardInterrupt) as err:
+        for p in procs:
+            if p.poll() is None:       
+                try:
+                    p.kill()
+                except Exception:
+                    pass
+        raise
 
 def check_ssh_connections(hosts):
     results = [False] * len(hosts)
