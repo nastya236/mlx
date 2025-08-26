@@ -116,14 +116,6 @@ inline void recvAll(int sock, void* buf, size_t len) {
     len -= rec;
   }
 }
-cudaStream_t get_comm_stream() {
-  static cudaStream_t comm_stream = []{
-      cudaStream_t s;
-      cudaStreamCreateWithFlags(&s, cudaStreamNonBlocking);
-      return s;
-  }();
-  return comm_stream;
-}
 
 inline void bootstrap_unique_id(
     ncclUniqueId& id,
@@ -253,7 +245,7 @@ class NCCLGroup : public GroupImpl {
         size_(worldSize),
         comm_(nullptr),
         initMethod_(initMethod),
-        comm_stream_(detail::get_comm_stream()) {
+        comm_stream_(nullptr) {
     if (initialized_)
       return;
     int ndev;
@@ -261,11 +253,13 @@ class NCCLGroup : public GroupImpl {
     CHECK_CUDA(cudaSetDevice(rank_ % ndev));
     detail::bootstrap_unique_id(uniqueId_, rank_, size_, initMethod_);
     CHECK_NCCL(ncclCommInitRank(&comm_, size_, uniqueId_, rank_));
+    CHECK_CUDA(cudaStreamCreateWithFlags(&comm_stream_, cudaStreamNonBlocking));
     initialized_ = true;
   }
 
   ~NCCLGroup() {
     ncclCommDestroy(comm_);
+    cudaStreamDestroy(comm_stream_);
     ncclGroupEnd();
     initialized_ = false;
   }
