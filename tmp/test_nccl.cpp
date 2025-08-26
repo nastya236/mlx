@@ -30,8 +30,8 @@ int main() {
 
   // std::cout << "If contigous: " << a.flags().row_contiguous << std::endl;
   mx::array b = mx::distributed::all_sum(a, group);
-  std::cout << b.size() << std::endl;
-  mx::eval(b);
+  // std::cout << b.size() << std::endl;
+  // mx::eval(b);
   std::cout << "Rank: " << rank << " Result: " << b << std::endl;
   return 0;
 }
