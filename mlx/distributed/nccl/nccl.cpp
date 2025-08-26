@@ -16,6 +16,7 @@
 #include "mlx/backend/cuda/device.h"
 #include "mlx/distributed/distributed.h"
 #include "mlx/distributed/distributed_impl.h"
+#include "mlx/backend/cuda/cuda.h"
 #include "mlx/dtype_utils.h"
 #include "mlx/utils.h"
 
@@ -114,6 +115,14 @@ inline void recvAll(int sock, void* buf, size_t len) {
     ptr += rec;
     len -= rec;
   }
+}
+cudaStream_t get_comm_stream() {
+  static cudaStream_t comm_stream = []{
+      cudaStream_t s;
+      cudaStreamCreateWithFlags(&s, cudaStreamNonBlocking);
+      return s;
+  }();
+  return comm_stream;
 }
 
 inline void bootstrap_unique_id(
@@ -243,7 +252,8 @@ class NCCLGroup : public GroupImpl {
       : rank_(worldRank),
         size_(worldSize),
         comm_(nullptr),
-        initMethod_(initMethod) {
+        initMethod_(initMethod),
+        comm_stream_(detail::get_comm_stream()) {
     if (initialized_)
       return;
     int ndev;
@@ -311,8 +321,11 @@ class NCCLGroup : public GroupImpl {
       Stream stream,
       ncclDataType_t dt,
       ncclRedOp_t op) {
+        
     auto& encoder = cu::get_command_encoder(stream);
-
+    cu::CudaEvent event;
+    event.record(encoder.stream());
+    event.wait(comm_stream_);
     CHECK_NCCL(ncclAllReduce(
         input.data<T>(),
         output.data<T>(),
@@ -320,7 +333,10 @@ class NCCLGroup : public GroupImpl {
         dt,
         op,
         comm_,
-        encoder.stream()));
+        comm_stream_));
+    event.record(comm_stream_);
+    event.wait(encoder.stream());
+    
   }
 
   int rank_, size_;
@@ -328,6 +344,8 @@ class NCCLGroup : public GroupImpl {
   ncclUniqueId uniqueId_;
   ncclComm_t comm_;
   bool initialized_ = false;
+  cudaStream_t comm_stream_;
+
 };
 
 bool is_available() {

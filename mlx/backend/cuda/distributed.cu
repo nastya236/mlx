@@ -31,11 +31,11 @@ void AllReduce::eval_gpu(
 
   auto [input, output] = set_input_output(inputs[0], outputs[0]);
 
-  auto& encoder = cu::get_command_encoder(stream());
-  encoder.set_input_array(input);
-  encoder.set_output_array(output);
+  // auto& encoder = cu::get_command_encoder(stream());
+  // encoder.set_input_array(input);
+  // encoder.set_output_array(output);
 
-  auto capture = encoder.capture_context();
+  // auto capture = encoder.capture_context();
   auto& s = stream();
 
   switch (reduce_type_) {
