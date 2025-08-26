@@ -27,7 +27,7 @@ int main() {
   auto group = mx::distributed::init(/*strict=*/true, /*bk=*/"nccl");
 
   mx::array a = 1e-2 * mx::ones({1400000}) * rank;
-  mx::eval(a);
+  // mx::eval(a);
   std::cout << "Rank: " << rank << " A: " << a << std::endl;
   // std::cout << "If contigous: " << a.flags().row_contiguous << std::endl;
   mx::array b = mx::distributed::all_sum(a, group);
