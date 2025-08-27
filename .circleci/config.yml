@@ -89,7 +89,8 @@ jobs:
           command: |
             uv venv
             uv pip install cmake
-            uv pip install -e ".[dev]" -v
+            DEBUG=1 CMAKE_ARGS="-DCMAKE_COMPILE_WARNING_AS_ERROR=ON" \
+              uv pip install -e ".[dev]" -v
       - run:
           name: Generate package stubs
           command: |
@@ -231,7 +232,8 @@ jobs:
           name: Install Python package
           command: |
             uv venv
-            CMAKE_ARGS="-DMLX_BUILD_CUDA=ON -DCMAKE_CUDA_COMPILER=`which nvcc`" \
+            uv pip install cmake
+            DEBUG=1 CMAKE_ARGS="-DMLX_BUILD_CUDA=ON -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DCMAKE_CUDA_COMPILER=`which nvcc`" \
               uv pip install -e ".[dev]" -v
       - run:
           name: Run Python tests
@@ -239,6 +241,18 @@ jobs:
             source .venv/bin/activate
             LOW_MEMORY=1 DEVICE=cpu python -m unittest discover python/tests -v
             LOW_MEMORY=1 DEVICE=gpu python -m tests discover python/tests -v
+      - run:
+          name: Build CPP only
+          command: |
+            source .venv/bin/activate
+            cmake . -B build \
+              -DMLX_BUILD_CUDA=ON \
+              -DCMAKE_CUDA_COMPILER=`which nvcc` \
+              -DCMAKE_BUILD_TYPE=DEBUG
+            cmake --build build -j `nproc`
+      - run:
+          name: Run CPP tests
+          command: ./build/tests/tests -sfe="*fft_tests.cpp,*linalg_tests.cpp"
       - run:
           name: CCache report
           command: |
@@ -393,7 +407,7 @@ jobs:
         default: ""
     machine:
       image: ubuntu-2204:current
-      resource_class: large
+      resource_class: xlarge
     steps:
       - checkout
       - run:
@@ -405,7 +419,6 @@ jobs:
             sudo dpkg -i cuda-keyring_1.1-1_all.deb
             sudo apt-get update
             sudo apt-get install cuda-toolkit-12-9 libcudnn9-dev-cuda-12
-            sudo apt-get install libnccl2 libnccl-dev
             sudo apt-get install libblas-dev liblapack-dev liblapacke-dev
             sudo apt-get install zip
             pip install auditwheel
