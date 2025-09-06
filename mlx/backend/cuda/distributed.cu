@@ -54,8 +54,8 @@ void AllReduce::eval_gpu(
   };
 
   auto [input, output] = set_input_output(inputs[0], outputs[0]);
-  const void* in_ptr = input.data<void>() const void* out_ptr =
-      output.data<void>();
+  const void* in_ptr = input.data<void>();
+  const void* out_ptr = output.data<void>();
 
   log_ptr_if_changed("in", in_ptr, input.nbytes());
   log_ptr_if_changed("out", out_ptr, output.nbytes());
