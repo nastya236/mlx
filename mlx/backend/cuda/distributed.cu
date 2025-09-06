@@ -122,10 +122,9 @@ void AllReduce::eval_gpu(
       branch_name(used_branch));
 
   const void *in_ptr = input.data<void>(),
-             const void *out_ptr = output.data<void>(),
-
-             print_ptr_change(
-                 "in", rank_, global_step_, in_ptr, input.nbytes());
+  const void *out_ptr = output.data<void>(),
+  
+  print_ptr_change("in", rank_, global_step_, in_ptr, input.nbytes());
   print_ptr_change("out", rank_, global_step_, out_ptr, output.nbytes());
 
   auto& encoder = cu::get_command_encoder(stream());
