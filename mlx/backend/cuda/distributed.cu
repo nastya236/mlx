@@ -8,66 +8,46 @@
 
 #include <cassert>
 
-#include <cuda_runtime_api.h>
 #include <cstdio>
+#include <cuda_runtime_api.h>
 
-enum class SIOBranch : uint8_t { CopyMade, Donated, FreshAlloc };
+enum class SIOBranch : unsigned char { CopyMade=0, Donated=1, FreshAlloc=2 };
 
-static const char* branch_name(SIOBranch b) {
+static inline const char* branch_name(SIOBranch b) {
   switch (b) {
-    case SIOBranch::CopyMade:
-      return "copy_gpu";
-    case SIOBranch::Donated:
-      return "donated";
-    case SIOBranch::FreshAlloc:
-      return "allocated";
-    default:
-      return "unknown";
+    case SIOBranch::CopyMade:   return "copy_gpu";
+    case SIOBranch::Donated:    return "donated";
+    case SIOBranch::FreshAlloc: return "allocated";
+    default:                    return "unknown";
   }
 }
 
-static void print_ptr_change(
-    const char* tag,
-    int rank,
-    int step,
-    const void* cur_ptr,
-    size_t nbytes) {
-  static const void* prev_in = nullptr;
-  static size_t prev_in_sz = 0;
-  static const void* prev_out = nullptr;
-  static size_t prev_out_sz = 0;
+struct PtrStamp { const void* ptr=nullptr; size_t nbytes=0; };
+static PtrStamp g_in_stamp, g_out_stamp;
 
-  const bool is_in = (tag[0] == 'i'); // "in" or "out"
-  const void*& prev_ptr = is_in ? prev_in : prev_out;
-  size_t& prev_sz = is_in ? prev_in_sz : prev_out_sz;
-
-  const bool changed = (cur_ptr != prev_ptr) || (nbytes != prev_sz);
+static inline void log_ptr_if_changed(const char* tag,
+                                      const void* cur_ptr,
+                                      size_t nbytes) {
+  PtrStamp& s = (tag[0]=='i') ? g_in_stamp : g_out_stamp;
+  const bool changed = (s.ptr != cur_ptr) || (s.nbytes != nbytes);
   if (changed) {
-    std::fprintf(
-        stderr,
-        "[rank %d] step %d %-3s ptr=%p bytes=%zu <-- CHANGED\n",
-        rank,
-        step,
-        tag,
-        cur_ptr,
-        nbytes);
-    prev_ptr = cur_ptr;
-    prev_sz = nbytes;
-
+    std::fprintf(stderr, "[%s] ptr=%p bytes=%zu <-- CHANGED\n",
+                 tag, cur_ptr, nbytes);
+#if CUDART_VERSION >= 11000
     cudaPointerAttributes attr;
     if (cudaPointerGetAttributes(&attr, cur_ptr) == cudaSuccess) {
-#if CUDART_VERSION >= 11000
-      std::fprintf(
-          stderr,
-          "            type=%d (0=Host,1=Device,2=Managed)\n",
-          int(attr.type));
+      // 0=Host, 1=Device, 2=Managed (for new CUDA); older has memoryType
+#if defined(cudaMemoryTypeDevice) // handle older SDKs gracefully
+      std::fprintf(stderr, "        type=%d (0=Host,1=Device,2=Managed)\n",
+                   int(attr.type));
 #else
-      std::fprintf(
-          stderr,
-          "            memoryType=%d (1=Host,2=Device)\n",
-          int(attr.memoryType));
+      std::fprintf(stderr, "        memoryType=%d (1=Host,2=Device)\n",
+                   int(attr.memoryType));
 #endif
     }
+#endif
+    s.ptr   = cur_ptr;
+    s.nbytes = nbytes;
   }
 }
 
@@ -92,11 +72,11 @@ void AllReduce::eval_gpu(
   //     return {in, out};
   //   }
   // };
-  SIOBranch used_branch = SIOBranch::FreshAlloc; // will be set below
+  SIOBranch used_branch = SIOBranch::FreshAlloc;
 
-  auto set_input_output = [this, &used_branch, s = stream()](
-                              const array& in,
-                              array& out) -> std::pair<array, array> {
+  auto set_input_output =
+  [this, &used_branch, s = stream()](const array& in, array& out)
+  -> std::pair<array, array> {
     if (!in.flags().row_contiguous) {
       copy_gpu(in, out, CopyType::General, s);
       used_branch = SIOBranch::CopyMade;
@@ -114,18 +94,13 @@ void AllReduce::eval_gpu(
 
   auto [input, output] = set_input_output(inputs[0], outputs[0]);
 
-  std::fprintf(
-      stderr,
-      "[rank %d] step %d set_input_output: %s\n",
-      rank_,
-      global_step_,
-      branch_name(used_branch));
-
-  const void *in_ptr = input.data<void>(),
-  const void *out_ptr = output.data<void>(),
+  auto in_ptr = input.data<void>(),
+  auto out_ptr = output.data<void>(),
   
-  print_ptr_change("in", rank_, global_step_, in_ptr, input.nbytes());
-  print_ptr_change("out", rank_, global_step_, out_ptr, output.nbytes());
+  std::fprintf(stderr, "set_input_output branch: %s\n", branch_name(used_branch));
+
+  log_ptr_if_changed("in",  in_ptr,  input.nbytes());
+  log_ptr_if_changed("out", out_ptr, output.nbytes());
 
   auto& encoder = cu::get_command_encoder(stream());
   encoder.set_input_array(input);
