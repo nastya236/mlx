@@ -7,46 +7,23 @@
 #include "mlx/primitives.h"
 
 #include <cassert>
-
 #include <cstdio>
-#include <cuda_runtime_api.h>
+#include <iostream>
 
-enum class SIOBranch : unsigned char { CopyMade=0, Donated=1, FreshAlloc=2 };
-
-static inline const char* branch_name(SIOBranch b) {
-  switch (b) {
-    case SIOBranch::CopyMade:   return "copy_gpu";
-    case SIOBranch::Donated:    return "donated";
-    case SIOBranch::FreshAlloc: return "allocated";
-    default:                    return "unknown";
-  }
-}
-
-struct PtrStamp { const void* ptr=nullptr; size_t nbytes=0; };
+struct PtrStamp {
+  const void* ptr = nullptr;
+  size_t nbytes = 0;
+};
 static PtrStamp g_in_stamp, g_out_stamp;
 
-static inline void log_ptr_if_changed(const char* tag,
-                                      const void* cur_ptr,
-                                      size_t nbytes) {
-  PtrStamp& s = (tag[0]=='i') ? g_in_stamp : g_out_stamp;
+static inline void
+log_ptr_if_changed(const char* tag, const void* cur_ptr, size_t nbytes) {
+  PtrStamp& s = (tag[0] == 'i') ? g_in_stamp : g_out_stamp;
   const bool changed = (s.ptr != cur_ptr) || (s.nbytes != nbytes);
   if (changed) {
-    std::fprintf(stderr, "[%s] ptr=%p bytes=%zu <-- CHANGED\n",
-                 tag, cur_ptr, nbytes);
-#if CUDART_VERSION >= 11000
-    cudaPointerAttributes attr;
-    if (cudaPointerGetAttributes(&attr, cur_ptr) == cudaSuccess) {
-      // 0=Host, 1=Device, 2=Managed (for new CUDA); older has memoryType
-#if defined(cudaMemoryTypeDevice) // handle older SDKs gracefully
-      std::fprintf(stderr, "        type=%d (0=Host,1=Device,2=Managed)\n",
-                   int(attr.type));
-#else
-      std::fprintf(stderr, "        memoryType=%d (1=Host,2=Device)\n",
-                   int(attr.memoryType));
-#endif
-    }
-#endif
-    s.ptr   = cur_ptr;
+    std::fprintf(
+        stderr, "[%s] ptr=%p bytes=%zu <-- CHANGED\n", tag, cur_ptr, nbytes);
+    s.ptr = cur_ptr;
     s.nbytes = nbytes;
   }
 }
@@ -58,48 +35,29 @@ void AllReduce::eval_gpu(
   assert(inputs.size() == 1);
   assert(outputs.size() == 1);
 
-  // auto set_input_output =
-  //     [s = stream()](const array& in, array& out) -> std::pair<array, array>
-  //     {
-  //   if (!in.flags().row_contiguous) {
-  //     copy_gpu(in, out, CopyType::General, s);
-  //     return {out, out};
-  //   } else if (in.is_donatable()) {
-  //     out.copy_shared_buffer(in);
-  //     return {in, out};
-  //   } else {
-  //     out.set_data(allocator::malloc(out.nbytes()));
-  //     return {in, out};
-  //   }
-  // };
-  SIOBranch used_branch = SIOBranch::FreshAlloc;
-
-  auto set_input_output =
-  [this, &used_branch, s = stream()](const array& in, array& out)
-  -> std::pair<array, array> {
+  auto set_input_output = [this, s = stream()](
+                              const array& in,
+                              array& out) -> std::pair<array, array> {
     if (!in.flags().row_contiguous) {
+      std::cout << "set_input_output branch: copy_gpu" << std::endl;
       copy_gpu(in, out, CopyType::General, s);
-      used_branch = SIOBranch::CopyMade;
       return {out, out};
     } else if (in.is_donatable()) {
+      std::cout << "set_input_output branch: donated" << std::endl;
       out.copy_shared_buffer(in);
-      used_branch = SIOBranch::Donated;
       return {in, out};
     } else {
+      std::cout << "set_input_output branch: allocated" << std::endl;
       out.set_data(allocator::malloc(out.nbytes()));
-      used_branch = SIOBranch::FreshAlloc;
       return {in, out};
     }
   };
 
   auto [input, output] = set_input_output(inputs[0], outputs[0]);
+  const void* in_ptr = input.data<void>() const void* out_ptr =
+      output.data<void>();
 
-  auto in_ptr = input.data<void>(),
-  auto out_ptr = output.data<void>(),
-  
-  std::fprintf(stderr, "set_input_output branch: %s\n", branch_name(used_branch));
-
-  log_ptr_if_changed("in",  in_ptr,  input.nbytes());
+  log_ptr_if_changed("in", in_ptr, input.nbytes());
   log_ptr_if_changed("out", out_ptr, output.nbytes());
 
   auto& encoder = cu::get_command_encoder(stream());
