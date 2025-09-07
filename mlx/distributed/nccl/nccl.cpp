@@ -332,7 +332,7 @@ class NCCLGroup : public GroupImpl {
       ncclDataType_t dt,
       ncclRedOp_t op) {
     auto& encoder = cu::get_command_encoder(stream);
-    void* workspace = this->get_workspace();
+    void* workspace_ptr = this->get_workspace();
 
     CHECK_CUDA(cudaMemcpyAsync(
         workspace_ptr,
