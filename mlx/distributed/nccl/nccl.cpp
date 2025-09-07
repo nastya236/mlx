@@ -339,7 +339,7 @@ class NCCLGroup : public GroupImpl {
         input.data<T>(), // Source is a typed pointer
         input.nbytes(),
         cudaMemcpyDeviceToDevice,
-        stream));
+        encoder.stream()));
 
     const T* send_buffer = static_cast<const T*>(workspace_ptr);
     T* receive_buffer = static_cast<T*>(workspace_ptr);
@@ -358,7 +358,7 @@ class NCCLGroup : public GroupImpl {
         workspace_ptr,
         output.nbytes(),
         cudaMemcpyDeviceToDevice,
-        stream));
+        encoder.stream()));
   }
   int rank_, size_;
   std::string initMethod_;
