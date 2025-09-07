@@ -275,8 +275,9 @@ class NCCLGroup : public GroupImpl {
   }
 
   ~NCCLGroup() {
-    ncclCommDestroy(comm_);
-    ncclGroupEnd();
+    CHECK_NCCL(ncclCommDestroy(comm_));
+    CHECK_NCCL(ncclMemFree(workspace_buffer_));
+    CHECK_NCCL(ncclGroupEnd());
     initialized_ = false;
   }
 
@@ -354,7 +355,7 @@ class NCCLGroup : public GroupImpl {
         encoder.stream()));
 
     CHECK_CUDA(cudaMemcpyAsync(
-        output.data<T>(), // Destination is a typed pointer
+        output.data<T>(),
         workspace_ptr,
         output.nbytes(),
         cudaMemcpyDeviceToDevice,
