@@ -234,6 +234,15 @@ inline void bootstrap_unique_id(
   }
 }
 
+size_t get_workspace_size() {
+  const char* size_str = std::getenv("MLX_NCCL_WORKSPACE_SIZE");
+  if (size_str) {
+    return std::stoull(size_str);
+  }
+  // Default to 3GB
+  return 3UL * 1024 * 1024 * 1024;
+}
+
 } // namespace detail
 
 using GroupImpl = mlx::core::distributed::detail::GroupImpl;
@@ -252,6 +261,17 @@ class NCCLGroup : public GroupImpl {
     detail::bootstrap_unique_id(uniqueId_, rank_, size_, initMethod_);
     CHECK_NCCL(ncclCommInitRank(&comm_, size_, uniqueId_, rank_));
     initialized_ = true;
+    // Allocate NCCL workspace
+    workspace_size_ = detail::get_workspace_size();
+
+    // Allocate buffer
+    if (workspace_size_ > 0) {
+      CHECK_NCCL(ncclMemAlloc(&workspace_buffer_, workspace_size_));
+    }
+  }
+
+  void* get_workspace() const {
+    return workspace_buffer_;
   }
 
   ~NCCLGroup() {
@@ -312,22 +332,42 @@ class NCCLGroup : public GroupImpl {
       ncclDataType_t dt,
       ncclRedOp_t op) {
     auto& encoder = cu::get_command_encoder(stream);
+    void* workspace = this->get_workspace();
+
+    CHECK_CUDA(cudaMemcpyAsync(
+        workspace_ptr,
+        input.data<T>(), // Source is a typed pointer
+        input.nbytes(),
+        cudaMemcpyDeviceToDevice,
+        stream));
+
+    const T* send_buffer = static_cast<const T*>(workspace_ptr);
+    T* receive_buffer = static_cast<T*>(workspace_ptr);
 
     CHECK_NCCL(ncclAllReduce(
-        input.data<T>(),
-        output.data<T>(),
+        send_buffer,
+        receive_buffer,
         input.size(),
         dt,
         op,
         comm_,
         encoder.stream()));
-  }
 
+    CHECK_CUDA(cudaMemcpyAsync(
+        output.data<T>(), // Destination is a typed pointer
+        workspace_ptr,
+        output.nbytes(),
+        cudaMemcpyDeviceToDevice,
+        stream));
+  }
   int rank_, size_;
   std::string initMethod_;
   ncclUniqueId uniqueId_;
   ncclComm_t comm_;
   bool initialized_ = false;
+  void* workspace_buffer_{nullptr};
+  void* workspace_handle_{nullptr};
+  size_t workspace_size_{0};
 };
 
 bool is_available() {
