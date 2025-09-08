@@ -23,10 +23,7 @@ void AllReduce::eval_gpu(
     } else if (in.is_donatable()) {
       out.copy_shared_buffer(in);
       return {in, out};
-    }
-    else {
-      // void* workspace_ptr = group().get_workspace();
-      // out.set_data(allocator::Buffer(workspace_ptr));
+    } else {
       out.set_data(allocator::malloc(out.nbytes()));
       copy_gpu(in, out, CopyType::General, s);
       return {out, out};
@@ -55,6 +52,29 @@ void AllReduce::eval_gpu(
     default:
       throw std::runtime_error(
           "Only all reduce sum, max, and min are supported.");
+  }
+}
+
+void AllReduceCoalesced::eval_gpu(
+    const std::vector<array>& inputs,
+    std::vector<array>& outputs) {
+  assert(inputs.size() == outputs.size());
+  assert(!inputs.empty());
+
+  assert(inputs.size() == outputs.size());
+  for (size_t i = 0; i < inputs.size(); ++i) {
+    outputs[i].copy_shared_buffer(inputs[i]);
+  }
+  auto& encoder = cu::get_command_encoder(stream());
+  auto capture = encoder.capture_context();
+  auto& s = stream();
+
+  switch (reduce_type_) {
+    case Sum:
+      distributed::detail::all_sum_coalesced(group(), inputs, outputs, s);
+      break;
+    default:
+      throw std::runtime_error("Only all reduce sum is supported.");
   }
 }
 } // namespace mlx::core::distributed

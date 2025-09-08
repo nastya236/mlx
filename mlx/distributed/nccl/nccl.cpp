@@ -300,6 +300,16 @@ class NCCLGroup : public GroupImpl {
     });
   }
 
+  void all_sum_coalesced(
+      const std::vector<array>& inputs,
+      std::vector<array>& outputs,
+      Stream stream) {
+    detail::dispatch_dtype(input, [&](auto type_tag, ncclDataType_t dt) {
+      using T = typename decltype(type_tag)::type;
+      all_reduce_coalesced_impl<T>(inputs, outputs, stream, dt, ncclSum);
+    });
+  }
+
   virtual std::shared_ptr<GroupImpl> split(int color, int key = -1) override {
     throw std::runtime_error("[nccl] Group split not supported.");
   }
@@ -333,21 +343,7 @@ class NCCLGroup : public GroupImpl {
       ncclDataType_t dt,
       ncclRedOp_t op) {
     auto& encoder = cu::get_command_encoder(stream);
-    void* workspace_ptr = this->get_workspace();
-
-    // CHECK_CUDA(cudaMemcpyAsync(
-    //     workspace_ptr,
-    //     input.data<T>(), // Source is a typed pointer
-    //     input.nbytes(),
-    //     cudaMemcpyDeviceToDevice,
-    //     encoder.stream()));
-
-    // const T* send_buffer = static_cast<const T*>(workspace_ptr);
-    // T* receive_buffer = static_cast<T*>(workspace_ptr);
-
     CHECK_NCCL(ncclAllReduce(
-        // send_buffer,
-        // receive_buffer,
         input.data<T>(),
         output.data<T>(),
         input.size(),
@@ -355,14 +351,66 @@ class NCCLGroup : public GroupImpl {
         op,
         comm_,
         encoder.stream()));
-
-    // CHECK_CUDA(cudaMemcpyAsync(
-    //     output.data<T>(),
-    //     workspace_ptr,
-    //     output.nbytes(),
-    //     cudaMemcpyDeviceToDevice,
-    //     encoder.stream()));
   }
+
+  template <typename T>
+  void all_reduce_coalesced_impl(
+      const std::vector<array>& inputs,
+      std::vector<array>& outputs,
+      Stream stream,
+      ncclDataType_t dt,
+      ncclRedOp_t op) {
+    auto& encoder = cu::get_command_encoder(stream);
+    auto cuda_stream = encoder.stream();
+
+    size_t total_nbytes = 0;
+    for (const auto& arr : inputs) {
+      total_nbytes += arr.nbytes();
+    }
+    // questionable
+    if (workspace_size_ < total_nbytes) {
+      throw std::runtime_error(
+          "[nccl] Workspace size is smaller than the total size of gradients.");
+    }
+
+    void* workspace_buffer = this->get_workspace();
+    size_t current_offset = 0;
+
+    for (const auto& in_array : inputs) {
+      CHECK_CUDA(cudaMemcpyAsync(
+          static_cast<char*>(workspace_buffer) + current_offset,
+          in_array.data_ptr(),
+          in__array.nbytes(),
+          cudaMemcpyDeviceToDevice,
+          cuda_stream));
+
+      current_offset += in_array.nbytes();
+    }
+
+    ncclDataType_t dt = to_nccl_dtype(inputs[0].dtype());
+    size_t total_count = total_nbytes / inputs[0].itemsize();
+
+    CHECK_NCCL(ncclAllReduce(
+        workspace_buffer,
+        workspace_buffer,
+        total_count,
+        dt,
+        ncclSum,
+        comm_,
+        cuda_stream));
+    current_offset = 0;
+
+    for (auto& out_array : outputs) {
+      CHECK_CUDA(cudaMemcpyAsync(
+          out_array.data_ptr(),
+          static_cast<char*>(workspace_buffer) + current_offset,
+          out_array.nbytes(),
+          cudaMemcpyDeviceToDevice,
+          cuda_stream));
+      current_offset += out_array.nbytes();
+    }
+  }
+
   int rank_, size_;
   std::string initMethod_;
   ncclUniqueId uniqueId_;
