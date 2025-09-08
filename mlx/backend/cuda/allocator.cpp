@@ -125,11 +125,11 @@ Buffer CudaAllocator::malloc(size_t size) {
     //         "cudaMallocManaged failed: {}.", cudaGetErrorString(err)));
     //   }
     // }
-    }
       if (err != ncclSuccess) {
         throw std::runtime_error(
             fmt::format("ncclMemAlloc failed: {}.", ncclGetErrorString(err)));
       }
+    }
     lock.lock();
   }
   active_memory_ += size;
