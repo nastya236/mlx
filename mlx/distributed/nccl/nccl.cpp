@@ -240,7 +240,7 @@ size_t get_workspace_size() {
     return std::stoull(size_str);
   }
   // Default to 3GB
-  return 3UL * 1024 * 1024 * 1024;
+  return 0;
 }
 
 } // namespace detail
@@ -335,31 +335,33 @@ class NCCLGroup : public GroupImpl {
     auto& encoder = cu::get_command_encoder(stream);
     void* workspace_ptr = this->get_workspace();
 
-    CHECK_CUDA(cudaMemcpyAsync(
-        workspace_ptr,
-        input.data<T>(), // Source is a typed pointer
-        input.nbytes(),
-        cudaMemcpyDeviceToDevice,
-        encoder.stream()));
+    // CHECK_CUDA(cudaMemcpyAsync(
+    //     workspace_ptr,
+    //     input.data<T>(), // Source is a typed pointer
+    //     input.nbytes(),
+    //     cudaMemcpyDeviceToDevice,
+    //     encoder.stream()));
 
-    const T* send_buffer = static_cast<const T*>(workspace_ptr);
-    T* receive_buffer = static_cast<T*>(workspace_ptr);
+    // const T* send_buffer = static_cast<const T*>(workspace_ptr);
+    // T* receive_buffer = static_cast<T*>(workspace_ptr);
 
     CHECK_NCCL(ncclAllReduce(
-        send_buffer,
-        receive_buffer,
+        // send_buffer,
+        // receive_buffer,
+        input.data<T>(),
+        output.data<T>(),
         input.size(),
         dt,
         op,
         comm_,
         encoder.stream()));
 
-    CHECK_CUDA(cudaMemcpyAsync(
-        output.data<T>(),
-        workspace_ptr,
-        output.nbytes(),
-        cudaMemcpyDeviceToDevice,
-        encoder.stream()));
+    // CHECK_CUDA(cudaMemcpyAsync(
+    //     output.data<T>(),
+    //     workspace_ptr,
+    //     output.nbytes(),
+    //     cudaMemcpyDeviceToDevice,
+    //     encoder.stream()));
   }
   int rank_, size_;
   std::string initMethod_;
