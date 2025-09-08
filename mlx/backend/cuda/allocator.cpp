@@ -119,8 +119,9 @@ Buffer CudaAllocator::malloc(size_t size) {
     if (!buf) {
       buf = new CudaBuffer{nullptr, size};
       // cudaError_t err = cudaMallocManaged(&buf->data, size);
-      cudaError_t err = ncclMemAlloc(&buf->data, size);
-      if (err != cudaSuccess && err != cudaErrorMemoryAllocation) {
+      ncclResult_t err = ncclMemAlloc(&buf->data, size);
+      // if (err != cudaSuccess && err != cudaErrorMemoryAllocation) {
+      if (err != ncclSuccess) {
         throw std::runtime_error(fmt::format(
             "cudaMallocManaged failed: {}.", cudaGetErrorString(err)));
       }
