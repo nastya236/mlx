@@ -7,7 +7,7 @@
 #include <cuda_runtime.h>
 #include <fmt/format.h>
 #include <unistd.h>
-
+#include <nccl.h>
 #include <cassert>
 
 namespace mlx::core {
@@ -118,7 +118,8 @@ Buffer CudaAllocator::malloc(size_t size) {
     lock.unlock();
     if (!buf) {
       buf = new CudaBuffer{nullptr, size};
-      cudaError_t err = cudaMallocManaged(&buf->data, size);
+      // cudaError_t err = cudaMallocManaged(&buf->data, size);
+      cudaError_t err = ncclMemAlloc(&buf->data, size);
       if (err != cudaSuccess && err != cudaErrorMemoryAllocation) {
         throw std::runtime_error(fmt::format(
             "cudaMallocManaged failed: {}.", cudaGetErrorString(err)));
