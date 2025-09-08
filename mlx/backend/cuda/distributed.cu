@@ -26,7 +26,7 @@ void AllReduce::eval_gpu(
     //   return {in, out};
     else {
       void* workspace_ptr = group()->get_workspace();
-      out.set_data(allocator::Buffer(workspace_ptr))
+      out.set_data(allocator::Buffer(workspace_ptr));
       // out.set_data(allocator::malloc(out.nbytes()));
       copy_gpu(in, out, CopyType::General, s);
       return {out, out};
