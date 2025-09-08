@@ -25,14 +25,13 @@ void AllReduce::eval_gpu(
     //   out.copy_shared_buffer(in);
     //   return {in, out};
     else {
-      std::cout << "Allocating output buffer for all reduce\n";
-      out.set_data(allocator::malloc(out.nbytes()));
-      return {in, out};
+      void* workspace_ptr = group()->get_workspace();
+      out.set_data(allocator::Buffer(workspace_ptr))
+      // out.set_data(allocator::malloc(out.nbytes()));
+      copy_gpu(in, out, CopyType::General, s);
+      return {out, out};
     }
   };
-
-  // void* workspace_ptr = group()->get_workspace();
-  // out.set_data(allocator::Buffer(workspace_ptr))
 
   auto [input, output] = set_input_output(inputs[0], outputs[0]);
 

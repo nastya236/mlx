@@ -240,7 +240,7 @@ size_t get_workspace_size() {
     return std::stoull(size_str);
   }
   // Default to 3GB
-  return 0;
+  return 3ULL * 1024 * 1024 * 1024;
 }
 
 } // namespace detail
