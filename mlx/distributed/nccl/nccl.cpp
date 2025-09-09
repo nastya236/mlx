@@ -377,8 +377,15 @@ class NCCLGroup : public GroupImpl {
       throw std::runtime_error(
           "[nccl] Workspace size is smaller than the total size of gradients.");
     }
-    std::cout<< "workspace ptr " << this->get_workspace() << std::endl;
-    char* workspace_ptr = static_cast<char*>(this->get_workspace());
+    cudaPointerAttributes a{}; 
+    cudaError_t e = cudaPointerGetAttributes(&a, workspace_buffer_);
+    printf("class=%s, pinned=%s\n",
+       e!=cudaSuccess ? "host(pageable)" :
+       a.type==cudaMemoryTypeManaged ? "managed" :
+       a.type==cudaMemoryTypeDevice  ? "device" : "host(pinned)",
+       (e==cudaSuccess && a.type==cudaMemoryTypeHost) ? "yes" : "no");
+
+    char* workspace_ptr = static_cast<char*>(workspace_buffer_);
     std::cout<< "workspace ptr char " << workspace_ptr << std::endl;
     size_t current_offset = 0;
 
