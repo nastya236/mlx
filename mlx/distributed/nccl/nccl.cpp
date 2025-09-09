@@ -361,7 +361,6 @@ class NCCLGroup : public GroupImpl {
       ncclDataType_t dt,
       ncclRedOp_t op) {
     auto& encoder = cu::get_command_encoder(stream);
-    auto cuda_stream = encoder.stream();
 
     size_t total_nbytes = 0;
     for (const auto& arr : inputs) {
@@ -382,7 +381,7 @@ class NCCLGroup : public GroupImpl {
           in_array.data<T>(),
           in_array.nbytes(),
           cudaMemcpyDeviceToDevice,
-          cuda_stream));
+          encoder.stream()));
 
       current_offset += in_array.nbytes();
     }
@@ -397,7 +396,7 @@ class NCCLGroup : public GroupImpl {
         dt,
         ncclSum,
         comm_,
-        cuda_stream));
+        encoder.stream()));
     current_offset = 0;
 
     for (auto& out_array : outputs) {
@@ -406,7 +405,7 @@ class NCCLGroup : public GroupImpl {
           static_cast<T*>(workspace_buffer) + current_offset,
           out_array.nbytes(),
           cudaMemcpyDeviceToDevice,
-          cuda_stream));
+          encoder.stream()));
       current_offset += out_array.nbytes();
     }
   }
