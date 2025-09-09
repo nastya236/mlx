@@ -65,9 +65,7 @@ void AllReduceCoalesced::eval_gpu(
   for (size_t i = 0; i < inputs.size(); ++i) {
     outputs[i].copy_shared_buffer(inputs[i]);
   }
-
-  std::cout << "AllReduceCoalesced: number of arrays = " << inputs.size()
-            << std::endl;
+  
   auto& encoder = cu::get_command_encoder(stream());
   auto capture = encoder.capture_context();
   auto& s = stream();
