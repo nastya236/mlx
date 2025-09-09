@@ -387,10 +387,10 @@ class NCCLGroup : public GroupImpl {
           in_array.nbytes(),
           cudaMemcpyDeviceToDevice,
           encoder.stream()));
-      // if (rank_ == 0) {
-      //   std::cout<< "input ptr " << in_array.data<T>() << std::endl;
-      //   std::cout<< "inp workspace ptr" << workspace_buffer_ + current_offset << std::endl;
-      // }
+      if (rank_ == 0) {
+        std::cout<< "input ptr " << in_array.data<T>() << std::endl;
+        std::cout<< "inp workspace ptr" << workspace_buffer_ + current_offset << std::endl;
+      }
       current_offset += in_array.nbytes();
     }
 
@@ -413,10 +413,10 @@ class NCCLGroup : public GroupImpl {
           out_array.nbytes(),
           cudaMemcpyDeviceToDevice,
           encoder.stream()));
-      // if (rank_ == 0) {
-      //   std::cout<< "out ptr " << out_array.data<T>() << std::endl;
-      //   std::cout<< "out workspace ptr" << workspace_buffer_ + current_offset << std::endl;
-      // }
+      if (rank_ == 0) {
+        std::cout<< "out ptr " << out_array.data<T>() << std::endl;
+        std::cout<< "out workspace ptr" << workspace_buffer_ + current_offset << std::endl;
+      }
       current_offset += out_array.nbytes();
     }
   }
