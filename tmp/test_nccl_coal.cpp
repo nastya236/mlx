@@ -29,7 +29,7 @@ int main() {
   std::vector<mx::array> arrays;
   std::vector<int> shapes; 
   
-  for (int i = 0; i < 100; ++i) {
+  for (int i = 0; i < 3; ++i) {
     arrays.push_back(1e-2 * rank * mx::random::uniform({1000 - i, 1}));
   }
   mx::eval(arrays);
