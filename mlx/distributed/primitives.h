@@ -105,6 +105,13 @@ class AllReduceCoalesced : public DistPrimitive {
     throw std::runtime_error("[AllReduceCoalesced] VJP is not supported.");
   }
 
+  const char* name() const override {
+    switch (reduce_type_) {
+      case Sum:
+        return "Sum AllReduceCoalesced";
+    }
+    return "<unknown AllReduceCoalesced>";
+  }
  private:
   ReduceType reduce_type_;
 };
