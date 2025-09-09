@@ -23,6 +23,10 @@ class GroupImpl {
 
   // Actual communication operations
   virtual void all_sum(const array& input, array& output, Stream stream) = 0;
+  virtual void all_sum_coalesced(
+      const std::vector<array>& inputs,
+      std::vector<array>& outputs,
+      Stream stream) = 0;
   virtual void all_gather(const array& input, array& output, Stream stream) = 0;
   virtual void send(const array& input, int dst, Stream stream) = 0;
   virtual void recv(array& out, int src, Stream stream) = 0;
@@ -50,5 +54,11 @@ void all_max(Group group, const array& input, array& output, Stream stream);
 
 /** Min reduction */
 void all_min(Group group, const array& input, array& output, Stream stream);
+
+void all_sum_coalesced(
+    Group group,
+    const std::vector<array>& inputs,
+    std::vector<array>& outputs,
+    Stream stream);
 
 } // namespace mlx::core::distributed::detail

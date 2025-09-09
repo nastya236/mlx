@@ -14,6 +14,11 @@ array all_sum(
     std::optional<Group> group = std::nullopt,
     StreamOrDevice s = {});
 
+std::vector<array> all_sum_coalesced(
+    const std::vector<array>& x,
+    std::optional<Group> group = std::nullopt,
+    StreamOrDevice s = {});
+    
 array all_gather(
     const array& x,
     std::optional<Group> group = std::nullopt,
