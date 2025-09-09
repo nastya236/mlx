@@ -42,8 +42,8 @@ array all_sum(
 
 std::vector<array> all_sum_coalesced(
   const std::vector<array>& x,
-  std::optional<Group> group_ = std::nullopt,
-  StreamOrDevice s = {}) {
+  std::optional<Group> group_  /* = std::nullopt */,
+  StreamOrDevice s  /* = {} */) {
 
 auto group = to_group(group_);
 if (group.size() == 1) return x;
@@ -66,6 +66,7 @@ return array::make_arrays(
     std::make_shared<AllReduceCoalesced>(stream, group, AllReduceCoalesced::Sum),
     x);
 }
+
 array all_max(
     const array& x,
     std::optional<Group> group_ /* = std::nullopt */,
