@@ -304,7 +304,7 @@ class NCCLGroup : public GroupImpl {
       const std::vector<array>& inputs,
       std::vector<array>& outputs,
       Stream stream) {
-    detail::dispatch_dtype(input, [&](auto type_tag, ncclDataType_t dt) {
+    detail::dispatch_dtype(inputs[0], [&](auto type_tag, ncclDataType_t dt) {
       using T = typename decltype(type_tag)::type;
       all_reduce_coalesced_impl<T>(inputs, outputs, stream, dt, ncclSum);
     });
@@ -378,8 +378,8 @@ class NCCLGroup : public GroupImpl {
 
     for (const auto& in_array : inputs) {
       CHECK_CUDA(cudaMemcpyAsync(
-          static_cast<char*>(workspace_buffer) + current_offset,
-          in_array.data_ptr(),
+          static_cast<T*>(workspace_buffer) + current_offset,
+          in_array.data<T>(),
           in_array.nbytes(),
           cudaMemcpyDeviceToDevice,
           cuda_stream));
@@ -402,8 +402,8 @@ class NCCLGroup : public GroupImpl {
 
     for (auto& out_array : outputs) {
       CHECK_CUDA(cudaMemcpyAsync(
-          out_array.data_ptr(),
-          static_cast<char*>(workspace_buffer) + current_offset,
+          out_array.data<T>(),
+          static_cast<T*>(workspace_buffer) + current_offset,
           out_array.nbytes(),
           cudaMemcpyDeviceToDevice,
           cuda_stream));
