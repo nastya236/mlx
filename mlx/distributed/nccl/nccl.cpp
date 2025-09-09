@@ -388,7 +388,8 @@ class NCCLGroup : public GroupImpl {
       current_offset += in_array.nbytes();
     }
 
-    size_t total_count = total_nbytes / inputs[0].itemsize();
+    size_t total_count = total_nbytes / sizeof(T);
+    std::cout << "Total count: " << total_count << std::endl;
 
     CHECK_NCCL(ncclAllReduce(
         this->get_workspace(),
