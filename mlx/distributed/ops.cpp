@@ -57,9 +57,6 @@ std::vector<array> all_sum_coalesced(
       std::make_shared<AllReduceCoalesced>(stream, group, AllReduceCoalesced::Sum),
       x);
 }
-
- }
-
 array all_max(
     const array& x,
     std::optional<Group> group_ /* = std::nullopt */,
