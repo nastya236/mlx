@@ -27,7 +27,7 @@ int main() {
   auto group = mx::distributed::init(/*strict=*/true, /*bk=*/"nccl");
 
   std::vector<mx::array> arrays;
-  for (int i = 0; i < 2; ++i) {
+  for (int i = 0; i < 1; ++i) {
     arrays.push_back(1e-2 * mx::ones({10}) * rank);
   }
   mx::eval(arrays);
