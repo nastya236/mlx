@@ -30,6 +30,7 @@ int main() {
   for (int i = 0; i < 2; ++i) {
     arrays.push_back(1e-2 * mx::ones({10}) * rank);
   }
+  mx::eval(arrays);
   std::vector<mx::array> results = mx::distributed::all_sum_coalesced(arrays, group);
   mx::eval(results);
   for (const auto& a : results) {
