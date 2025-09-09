@@ -377,7 +377,6 @@ class NCCLGroup : public GroupImpl {
       throw std::runtime_error(
           "[nccl] Workspace size is smaller than the total size of gradients.");
     }
-    cudaPointerAttributes a{}; 
 
     // char* workspace_ptr = static_cast<char*>(workspace_buffer_);
     // std::cout<< "workspace ptr char " << workspace_ptr << std::endl;
@@ -390,8 +389,12 @@ class NCCLGroup : public GroupImpl {
           in_array.nbytes(),
           cudaMemcpyDeviceToDevice,
           encoder.stream()));
-
       current_offset += in_array.nbytes();
+      std::cout<< "current offset " << current_offset << std::endl;
+      std::cout<< "in array nbytes " << in_array.nbytes() << std::endl;
+      std::cout<< "workspace ptr after memcpy " << workspace_buffer_ << std::endl;
+      std::cout<< "workspace ptr shifted " << workspace_buffer_ + current_offset << std::endl;
+      std::cout<< "----------------------------------" << std::endl;
     }
 
     size_t total_count = total_nbytes / sizeof(T);
