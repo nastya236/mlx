@@ -342,7 +342,7 @@ class NCCLGroup : public GroupImpl {
       Stream stream,
       ncclDataType_t dt,
       ncclRedOp_t op) {
-        
+
     auto& encoder = cu::get_command_encoder(stream);
     CHECK_NCCL(ncclAllReduce(
         input.data<T>(),
@@ -361,6 +361,7 @@ class NCCLGroup : public GroupImpl {
       Stream stream,
       ncclDataType_t dt,
       ncclRedOp_t op) {
+
     auto& encoder = cu::get_command_encoder(stream);
 
     size_t total_nbytes = 0;
@@ -373,12 +374,12 @@ class NCCLGroup : public GroupImpl {
           "[nccl] Workspace size is smaller than the total size of gradients.");
     }
 
-    void* workspace_buffer = this->get_workspace();
+    char* workspace_ptr = static_cast<char*>(this->get_workspace());
     size_t current_offset = 0;
 
     for (const auto& in_array : inputs) {
       CHECK_CUDA(cudaMemcpyAsync(
-          static_cast<T*>(workspace_buffer) + current_offset,
+          workspace_buffer + current_offset,
           in_array.data<T>(),
           in_array.nbytes(),
           cudaMemcpyDeviceToDevice,
@@ -390,8 +391,8 @@ class NCCLGroup : public GroupImpl {
     size_t total_count = total_nbytes / inputs[0].itemsize();
 
     CHECK_NCCL(ncclAllReduce(
-        workspace_buffer,
-        workspace_buffer,
+        this->get_workspace(),
+        this->get_workspace(),
         total_count,
         dt,
         ncclSum,
@@ -402,7 +403,7 @@ class NCCLGroup : public GroupImpl {
     for (auto& out_array : outputs) {
       CHECK_CUDA(cudaMemcpyAsync(
           out_array.data<T>(),
-          static_cast<T*>(workspace_buffer) + current_offset,
+          workspace_buffer + current_offset,
           out_array.nbytes(),
           cudaMemcpyDeviceToDevice,
           encoder.stream()));
