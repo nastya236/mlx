@@ -390,15 +390,10 @@ class NCCLGroup : public GroupImpl {
           cudaMemcpyDeviceToDevice,
           encoder.stream()));
       current_offset += in_array.nbytes();
-      std::cout<< "current offset " << current_offset << std::endl;
-      std::cout<< "in array nbytes " << in_array.nbytes() << std::endl;
-      std::cout<< "workspace ptr after memcpy " << workspace_buffer_ << std::endl;
-      std::cout<< "workspace ptr shifted " << workspace_buffer_ + current_offset << std::endl;
-      std::cout<< "----------------------------------" << std::endl;
     }
 
     size_t total_count = total_nbytes / sizeof(T);
-
+    std::cout<< "before all reduce first element: " << static_cast<T*>(workspace_buffer_)[0] << std::endl;
     CHECK_NCCL(ncclAllReduce(
         workspace_buffer_,
         workspace_buffer_,
@@ -407,8 +402,10 @@ class NCCLGroup : public GroupImpl {
         ncclSum,
         comm_,
         encoder.stream()));
-    current_offset = 0;
 
+    std::cout<< "after all reduce first element: " << static_cast<T*>(workspace_buffer_)[0] << std::endl;
+    current_offset = 0;
+    
     for (auto& out_array : outputs) {
       CHECK_CUDA(cudaMemcpyAsync(
           out_array.data<T>(),
