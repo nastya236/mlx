@@ -379,7 +379,7 @@ class NCCLGroup : public GroupImpl {
 
     for (const auto& in_array : inputs) {
       CHECK_CUDA(cudaMemcpyAsync(
-          workspace_buffer + current_offset,
+        workspace_ptr + current_offset,
           in_array.data<T>(),
           in_array.nbytes(),
           cudaMemcpyDeviceToDevice,
@@ -404,7 +404,7 @@ class NCCLGroup : public GroupImpl {
     for (auto& out_array : outputs) {
       CHECK_CUDA(cudaMemcpyAsync(
           out_array.data<T>(),
-          workspace_buffer + current_offset,
+          workspace_ptr + current_offset,
           out_array.nbytes(),
           cudaMemcpyDeviceToDevice,
           encoder.stream()));
