@@ -35,7 +35,7 @@ int main() {
   mx::eval(arrays);
   std::vector<mx::array> results = mx::distributed::all_sum_coalesced(arrays, group);
   mx::eval(results);
-  for (const auto& a : results) {
-    std::cout << "Rank: " << rank << " Output first element " << a.data<float>()[0] << std::endl;
+  for (int i = 0; i < results.size(); ++i) {
+    std::cout << "Rank " << rank << ", array " << i << ", sum: " << mx::sum(results[i]).item<float>() << std::endl;
   }
 }
