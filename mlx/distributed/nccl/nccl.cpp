@@ -389,7 +389,6 @@ class NCCLGroup : public GroupImpl {
     }
 
     size_t total_count = total_nbytes / sizeof(T);
-    std::cout << "Total count: " << total_count << std::endl;
 
     CHECK_NCCL(ncclAllReduce(
         this->get_workspace(),

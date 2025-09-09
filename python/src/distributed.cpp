@@ -301,4 +301,25 @@ void init_distributed(nb::module_& parent_module) {
         Returns:
           array: The array that was received from ``src``.
       )pbdoc");
+      m.def(
+        'all_sum_coalesced',
+        [](const std::vector<ScalarOrArray>& xs,
+           std::optional<mx::distributed::Group> group,
+           mx::StreamOrDevice s) {
+          std::vector<mx::array> arrays;
+          arrays.reserve(xs.size());
+          for (const auto& x : xs) {
+            arrays.push_back(to_array(x));
+          }
+          return mx::distributed::all_sum_coalesced(arrays, group, s);
+        },
+        "xs"_a,
+        nb::kw_only(),
+        "group"_a = nb::none(),
+        "stream"_a = nb::none(),
+        nb::sig(
+            "def all_sum_coalesced(xs: List[array], *, group: Optional[Group] = None, stream: Union[None, Stream, Device] = None) -> List[array]"),
+        R"pbdoc(
+          All reduce sum on a list of arrays. 
+      )pbdoc");
 }
