@@ -36,6 +36,6 @@ int main() {
   arrays = mx::distributed::all_sum_coalesced(arrays, group);
   mx::eval(arrays);
   for (int i = 0; i < arrays.size(); ++i) {
-    std::cout << "Rank " << rank << ", array " << i << ", sum: " << mx::sum(results[i]).item<float>() << std::endl;
+    std::cout << "Rank " << rank << ", array " << i << ", sum: " << mx::sum(arrays[i]).item<float>() << std::endl;
   }
 }
