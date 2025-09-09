@@ -386,7 +386,6 @@ class NCCLGroup : public GroupImpl {
       current_offset += in_array.nbytes();
     }
 
-    ncclDataType_t dt = to_nccl_dtype(inputs[0].dtype());
     size_t total_count = total_nbytes / inputs[0].itemsize();
 
     CHECK_NCCL(ncclAllReduce(
