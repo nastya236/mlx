@@ -32,10 +32,10 @@ int main() {
   for (int i = 0; i < 3; ++i) {
     arrays.push_back(1e-2 * rank * mx::random::uniform({1000 - i*200, 1}));
   }
+  // mx::eval(arrays);
+  arrays = mx::distributed::all_sum_coalesced(arrays, group);
   mx::eval(arrays);
-  std::vector<mx::array> results = mx::distributed::all_sum_coalesced(arrays, group);
-  mx::eval(results);
-  for (int i = 0; i < results.size(); ++i) {
+  for (int i = 0; i < arrays.size(); ++i) {
     std::cout << "Rank " << rank << ", array " << i << ", sum: " << mx::sum(results[i]).item<float>() << std::endl;
   }
 }
