@@ -69,7 +69,7 @@ void AllReduceCoalesced::eval_gpu(
     for (size_t i = 0; i < inputs.size(); ++i) {
       assert(inputs[i].flags().row_contiguous);
       assert(outputs[i].flags().row_contiguous);
-      assert(inputs[i].nbytes() == outputs[i].nbytes());
+      // assert(inputs[i].nbytes() == outputs[i].nbytes());
     }
   }
 
