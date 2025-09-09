@@ -378,20 +378,14 @@ class NCCLGroup : public GroupImpl {
           "[nccl] Workspace size is smaller than the total size of gradients.");
     }
     cudaPointerAttributes a{}; 
-    cudaError_t e = cudaPointerGetAttributes(&a, workspace_buffer_);
-    printf("class=%s, pinned=%s\n",
-       e!=cudaSuccess ? "host(pageable)" :
-       a.type==cudaMemoryTypeManaged ? "managed" :
-       a.type==cudaMemoryTypeDevice  ? "device" : "host(pinned)",
-       (e==cudaSuccess && a.type==cudaMemoryTypeHost) ? "yes" : "no");
 
-    char* workspace_ptr = static_cast<char*>(workspace_buffer_);
-    std::cout<< "workspace ptr char " << workspace_ptr << std::endl;
+    // char* workspace_ptr = static_cast<char*>(workspace_buffer_);
+    // std::cout<< "workspace ptr char " << workspace_ptr << std::endl;
     size_t current_offset = 0;
 
     for (const auto& in_array : inputs) {
       CHECK_CUDA(cudaMemcpyAsync(
-        workspace_ptr + current_offset,
+        workspace_buffer_ + current_offset,
           in_array.data<T>(),
           in_array.nbytes(),
           cudaMemcpyDeviceToDevice,
@@ -403,8 +397,8 @@ class NCCLGroup : public GroupImpl {
     size_t total_count = total_nbytes / sizeof(T);
 
     CHECK_NCCL(ncclAllReduce(
-        this->get_workspace(),
-        this->get_workspace(),
+        workspace_buffer_,
+        workspace_buffer_,
         total_count,
         dt,
         ncclSum,
@@ -415,13 +409,12 @@ class NCCLGroup : public GroupImpl {
     for (auto& out_array : outputs) {
       CHECK_CUDA(cudaMemcpyAsync(
           out_array.data<T>(),
-          workspace_ptr + current_offset,
+          workspace_buffer_ + current_offset,
           out_array.nbytes(),
           cudaMemcpyDeviceToDevice,
           encoder.stream()));
       std::cout<< "current offset " << current_offset << std::endl;
       std::cout<< "out array nbytes " << out_array.nbytes() << std::endl;
-      // std::cout<< "workspace ptr " << workspace_ptr << std::endl;
 
       current_offset += out_array.nbytes();
     }
