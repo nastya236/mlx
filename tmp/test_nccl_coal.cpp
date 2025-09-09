@@ -30,12 +30,12 @@ int main() {
   std::vector<int> shapes; 
   
   for (int i = 0; i < 3; ++i) {
-    arrays.push_back(1e-2 * mx::random::uniform({10, 1}));
+    arrays.push_back(1e-2 * mx::random::uniform({1000, 1}));
   }
   mx::eval(arrays);
   std::vector<mx::array> results = mx::distributed::all_sum_coalesced(arrays, group);
   mx::eval(results);
   for (const auto& a : results) {
-    std::cout << "Rank: " << rank << " Output: " << a << std::endl;
+    std::cout << "Rank: " << rank << " Output: " << a[0] << std::endl;
   }
 }
