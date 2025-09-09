@@ -275,9 +275,9 @@ class NCCLGroup : public GroupImpl {
   }
 
   ~NCCLGroup() {
-    CHECK_NCCL(ncclCommDestroy(comm_));
-    CHECK_NCCL(ncclMemFree(workspace_buffer_));
     CHECK_NCCL(ncclGroupEnd());
+    CHECK_NCCL(ncclMemFree(workspace_buffer_));
+    CHECK_NCCL(ncclCommDestroy(comm_));
     initialized_ = false;
   }
 
@@ -407,6 +407,10 @@ class NCCLGroup : public GroupImpl {
           out_array.nbytes(),
           cudaMemcpyDeviceToDevice,
           encoder.stream()));
+      std::cout<< "current offset" << current_offset << std::endl;
+      std::cout<< "out array nbytes" << out_array.nbytes() << std::endl;
+      std::cout<< "workspace ptr" << workspace_ptr << std::endl;
+
       current_offset += out_array.nbytes();
     }
   }
