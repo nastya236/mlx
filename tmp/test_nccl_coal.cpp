@@ -30,7 +30,7 @@ int main() {
   std::vector<int> shapes; 
   
   for (int i = 0; i < 3; ++i) {
-    arrays.push_back(1e-2 * rank * mx::random::uniform({1000 - i*10, 1}));
+    arrays.push_back(1e-2 * rank * mx::random::uniform({1000 - i*200, 1}));
   }
   mx::eval(arrays);
   std::vector<mx::array> results = mx::distributed::all_sum_coalesced(arrays, group);
