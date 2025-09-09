@@ -28,7 +28,7 @@ int main() {
 
   std::vector<mx::array> arrays;
   for (int i = 0; i < 5; ++i) {
-    arrays.push_back(1e-2 * mx::ones({100*rank}) * rank);
+    arrays.push_back(1e-2 * mx::ones({10}) * rank);
   }
   for (const auto& a : arrays) {
     std::cout << "Rank: " << rank << " Input: " << a << std::endl;
