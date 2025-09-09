@@ -393,7 +393,7 @@ class NCCLGroup : public GroupImpl {
     }
 
     size_t total_count = total_nbytes / sizeof(T);
-\    CHECK_NCCL(ncclAllReduce(
+    CHECK_NCCL(ncclAllReduce(
         workspace_buffer_,
         workspace_buffer_,
         total_count,
@@ -402,7 +402,7 @@ class NCCLGroup : public GroupImpl {
         comm_,
         encoder.stream()));
 
-\    current_offset = 0;
+    current_offset = 0;
     
     for (auto& out_array : outputs) {
       CHECK_CUDA(cudaMemcpyAsync(
