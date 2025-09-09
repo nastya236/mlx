@@ -342,6 +342,7 @@ class NCCLGroup : public GroupImpl {
       Stream stream,
       ncclDataType_t dt,
       ncclRedOp_t op) {
+        
     auto& encoder = cu::get_command_encoder(stream);
     CHECK_NCCL(ncclAllReduce(
         input.data<T>(),

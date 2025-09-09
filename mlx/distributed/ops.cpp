@@ -40,7 +40,7 @@ array all_sum(
       {x});
 }
 
-array all_sum_coalesced(
+std::vector<array> all_sum_coalesced(
     const std::vector<array>& x,
     std::optional<Group> group_ /* = std::nullopt */,
     StreamOrDevice s /* = {} */) {
@@ -51,13 +51,14 @@ array all_sum_coalesced(
   }
   auto stream = detail::communication_stream(group, s);
 
-  return array(
-      x.shape(),
-      x.dtype(),
-      std::make_shared<AllReduceCoalesced>(
-          stream, group, AllReduceCoalesced::Sum),
-      {x});
+  return array::make_arrays(
+      std::vector<Shape>(x.size(), x[0].shape()),
+      std::vector<Dtype>(x.size(), x[0].dtype()),
+      std::make_shared<AllReduceCoalesced>(stream, group, AllReduceCoalesced::Sum),
+      x);
 }
+
+ }
 
 array all_max(
     const array& x,
