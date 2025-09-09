@@ -465,6 +465,15 @@ class MPIGroup : public GroupImpl {
     });
   }
 
+  void all_sum_coalesced(
+      const std::vector<array>& inputs,
+      std::vector<array>& outputs,
+      Stream stream) override {
+    
+    throw std::runtime_error("All sum coalesced not implemented in MPI.");
+  
+  }
+
  private:
   MPI_Comm comm_;
   bool global_;

@@ -730,6 +730,15 @@ class RingGroup : public GroupImpl {
           }
         });
   }
+  
+  void all_sum_coalesced(
+    const std::vector<array>& inputs,
+    std::vector<array>& outputs,
+    Stream stream) override {
+  
+  throw std::runtime_error("All sum coalesced not implemented in Ring.");
+
+}
 
  private:
   template <typename T, typename ReduceOp>
