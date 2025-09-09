@@ -380,7 +380,7 @@ class NCCLGroup : public GroupImpl {
       CHECK_CUDA(cudaMemcpyAsync(
           static_cast<char*>(workspace_buffer) + current_offset,
           in_array.data_ptr(),
-          in__array.nbytes(),
+          in_array.nbytes(),
           cudaMemcpyDeviceToDevice,
           cuda_stream));
 
