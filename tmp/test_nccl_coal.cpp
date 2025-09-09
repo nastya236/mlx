@@ -27,8 +27,10 @@ int main() {
   auto group = mx::distributed::init(/*strict=*/true, /*bk=*/"nccl");
 
   std::vector<mx::array> arrays;
+  std::vector<int> shapes; 
+  
   for (int i = 0; i < 3; ++i) {
-    arrays.push_back(1e-2 * mx::ones({10 * (i+1)}) * rank);
+    arrays.push_back(1e-2 * mx::random::uniform({1000 / (i + 1), 1}));
   }
   mx::eval(arrays);
   std::vector<mx::array> results = mx::distributed::all_sum_coalesced(arrays, group);
