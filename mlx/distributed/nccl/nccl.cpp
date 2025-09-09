@@ -393,8 +393,7 @@ class NCCLGroup : public GroupImpl {
     }
 
     size_t total_count = total_nbytes / sizeof(T);
-    std::cout<< "before all reduce first element: " << static_cast<T*>(workspace_buffer_)[0] << std::endl;
-    CHECK_NCCL(ncclAllReduce(
+\    CHECK_NCCL(ncclAllReduce(
         workspace_buffer_,
         workspace_buffer_,
         total_count,
@@ -403,8 +402,7 @@ class NCCLGroup : public GroupImpl {
         comm_,
         encoder.stream()));
 
-    std::cout<< "after all reduce first element: " << static_cast<T*>(workspace_buffer_)[0] << std::endl;
-    current_offset = 0;
+\    current_offset = 0;
     
     for (auto& out_array : outputs) {
       CHECK_CUDA(cudaMemcpyAsync(
