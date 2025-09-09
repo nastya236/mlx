@@ -1,1 +1,1 @@
-nvcc -x cu -std=c++17 -Xcompiler -std=c++17 -arch=sm_75   -I/usr/local/include   tmp/test_nccl.cpp   -L/usr/local/lib -lmlx   -lcudnn -lnvrtc -lcuda -lcublasLt -lcublas -lcudart   -llapack -lblas -lnccl -o test
+nvcc -x cu -std=c++17 -Xcompiler -std=c++17 -arch=sm_75   -I/usr/local/include   tmp/test_nccl_coal.cpp   -L/usr/local/lib -lmlx   -lcudnn -lnvrtc -lcuda -lcublasLt -lcublas -lcudart   -llapack -lblas -lnccl -o test

@@ -27,13 +27,17 @@ int main() {
   auto group = mx::distributed::init(/*strict=*/true, /*bk=*/"nccl");
 
   std::vector<mx::array> arrays;
-  for (int i = 0; i < 10; ++i) {
+  for (int i = 0; i < 5; ++i) {
     arrays.push_back(1e-2 * mx::ones({100*rank}) * rank);
   }
+  for (const auto& a : arrays) {
+    std::cout << "Rank: " << rank << " Input: " << a << std::endl;
+  }
+
 
   std::vector<mx::array> results = mx::distributed::all_sum_coalesced(arrays, group);
   for (const auto& a : results) {
     mx::eval(a);
-    std::cout << "Rank: " << rank << " A: " << a << std::endl;
+    std::cout << "Rank: " << rank << " Output: " << a << std::endl;
   }
 }
