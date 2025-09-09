@@ -28,7 +28,7 @@ int main() {
 
   std::vector<mx::array> arrays;
   for (int i = 0; i < 3; ++i) {
-    arrays.push_back(1e-2 * mx::ones({10}) * rank);
+    arrays.push_back(1e-2 * mx::ones({10 * (i+1)}) * rank);
   }
   mx::eval(arrays);
   std::vector<mx::array> results = mx::distributed::all_sum_coalesced(arrays, group);
