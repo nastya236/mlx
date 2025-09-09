@@ -303,15 +303,10 @@ void init_distributed(nb::module_& parent_module) {
       )pbdoc");
       m.def(
         'all_sum_coalesced',
-        [](const std::vector<ScalarOrArray>& xs,
+        [](const std::vector<mx::array>& xs,
            std::optional<mx::distributed::Group> group,
            mx::StreamOrDevice s) {
-          std::vector<mx::array> arrays;
-          arrays.reserve(xs.size());
-          for (const auto& x : xs) {
-            arrays.push_back(to_array(x));
-          }
-          return mx::distributed::all_sum_coalesced(arrays, group, s);
+          return mx::distributed::all_sum_coalesced(xs, group, s);
         },
         "xs"_a,
         nb::kw_only(),
