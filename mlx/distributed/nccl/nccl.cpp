@@ -378,8 +378,6 @@ class NCCLGroup : public GroupImpl {
           "[nccl] Workspace size is smaller than the total size of gradients.");
     }
 
-    // char* workspace_ptr = static_cast<char*>(workspace_buffer_);
-    // std::cout<< "workspace ptr char " << workspace_ptr << std::endl;
     size_t current_offset = 0;
 
     for (const auto& in_array : inputs) {
@@ -389,6 +387,10 @@ class NCCLGroup : public GroupImpl {
           in_array.nbytes(),
           cudaMemcpyDeviceToDevice,
           encoder.stream()));
+      std::cout<< "current offset input " << current_offset << std::endl;
+      std::cout<< "input ptr " << in_array.data<T>() << std::endl;
+      std::cout<< "input nbytes " << in_array.nbytes() << std::endl;
+      std::cout<< "--------------------------------" << std::endl;
       current_offset += in_array.nbytes();
     }
 
@@ -414,6 +416,7 @@ class NCCLGroup : public GroupImpl {
       std::cout<< "current offset " << current_offset << std::endl;
       std::cout<< "out array nbytes " << out_array.nbytes() << std::endl;
       std::cout<< "output ptr " << out_array.data<T>() << std::endl;
+      std::cout<< "--------------------------------" << std::endl;
 
       current_offset += out_array.nbytes();
     }
