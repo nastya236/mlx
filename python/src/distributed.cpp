@@ -302,7 +302,7 @@ void init_distributed(nb::module_& parent_module) {
           array: The array that was received from ``src``.
       )pbdoc");
       m.def(
-        'all_sum_coalesced',
+        "all_sum_coalesced",
         [](const std::vector<mx::array>& xs,
            std::optional<mx::distributed::Group> group,
            mx::StreamOrDevice s) {
