@@ -65,7 +65,14 @@ void AllReduceCoalesced::eval_gpu(
   for (size_t i = 0; i < inputs.size(); ++i) {
     outputs[i].copy_shared_buffer(inputs[i]);
   }
-  
+  if (group().rank() == 0) {
+    for (size_t i = 0; i < inputs.size(); ++i) {
+      assert(inputs[i].flags().row_contiguous);
+      assert(outputs[i].flags().row_contiguous);
+      assert(inputs[i].nbytes() == outputs[i].nbytes());
+    }
+  }
+
   auto& encoder = cu::get_command_encoder(stream());
   auto capture = encoder.capture_context();
   auto& s = stream();
