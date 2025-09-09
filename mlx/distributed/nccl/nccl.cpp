@@ -390,6 +390,7 @@ class NCCLGroup : public GroupImpl {
           encoder.stream()));
 
       current_offset += in_array.nbytes();
+      std::cout<< "workspace ptr " << workspace_ptr << std::endl;
     }
 
     size_t total_count = total_nbytes / sizeof(T);
