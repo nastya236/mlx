@@ -377,8 +377,9 @@ class NCCLGroup : public GroupImpl {
       throw std::runtime_error(
           "[nccl] Workspace size is smaller than the total size of gradients.");
     }
-
+    std::cout<< "workspace ptr " << this->get_workspace() << std::endl;
     char* workspace_ptr = static_cast<char*>(this->get_workspace());
+    std::cout<< "workspace ptr char " << workspace_ptr << std::endl;
     size_t current_offset = 0;
 
     for (const auto& in_array : inputs) {
@@ -390,7 +391,6 @@ class NCCLGroup : public GroupImpl {
           encoder.stream()));
 
       current_offset += in_array.nbytes();
-      std::cout<< "workspace ptr " << workspace_ptr << std::endl;
     }
 
     size_t total_count = total_nbytes / sizeof(T);
