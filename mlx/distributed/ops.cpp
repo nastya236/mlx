@@ -41,21 +41,30 @@ array all_sum(
 }
 
 std::vector<array> all_sum_coalesced(
-    const std::vector<array>& x,
-    std::optional<Group> group_ /* = std::nullopt */,
-    StreamOrDevice s /* = {} */) {
-  auto group = to_group(group_);
+  const std::vector<array>& x,
+  std::optional<Group> group_ = std::nullopt,
+  StreamOrDevice s = {}) {
 
-  if (group.size() == 1) {
-    return x;
-  }
-  auto stream = detail::communication_stream(group, s);
+auto group = to_group(group_);
+if (group.size() == 1) return x;
 
-  return array::make_arrays(
-      std::vector<Shape>(x.size(), x[0].shape()),
-      std::vector<Dtype>(x.size(), x[0].dtype()),
-      std::make_shared<AllReduceCoalesced>(stream, group, AllReduceCoalesced::Sum),
-      x);
+auto stream = detail::communication_stream(group, s);
+
+std::vector<Shape> shapes;  
+shapes.reserve(x.size());
+std::vector<Dtype> dtypes;  
+dtypes.reserve(x.size());
+
+for (const auto& a : x) {
+  shapes.push_back(a.shape());
+  dtypes.push_back(a.dtype());
+}
+
+return array::make_arrays(
+    shapes,
+    dtypes,
+    std::make_shared<AllReduceCoalesced>(stream, group, AllReduceCoalesced::Sum),
+    x);
 }
 array all_max(
     const array& x,
