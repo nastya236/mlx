@@ -413,7 +413,7 @@ class NCCLGroup : public GroupImpl {
           encoder.stream()));
       std::cout<< "current offset " << current_offset << std::endl;
       std::cout<< "out array nbytes " << out_array.nbytes() << std::endl;
-      std::cout<< "workspace ptr " << workspace_ptr << std::endl;
+      // std::cout<< "workspace ptr " << workspace_ptr << std::endl;
 
       current_offset += out_array.nbytes();
     }
