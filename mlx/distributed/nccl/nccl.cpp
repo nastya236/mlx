@@ -267,10 +267,6 @@ class NCCLGroup : public GroupImpl {
     // Allocate buffer
     if (workspace_size_ > 0) {
       CHECK_NCCL(ncclMemAlloc(&workspace_buffer_, workspace_size_));
-      std::cout << "[nccl] Allocated workspace of size "
-                << workspace_size_ << " bytes, ptr: " << workspace_buffer_
-                << std::endl;
-    }
   }
 
   void* get_workspace() const {
@@ -387,10 +383,6 @@ class NCCLGroup : public GroupImpl {
           in_array.nbytes(),
           cudaMemcpyDeviceToDevice,
           encoder.stream()));
-      if (rank_ == 0) {
-        std::cout<< "input ptr " << in_array.data<T>() << std::endl;
-        std::cout<< "inp workspace ptr" << workspace_buffer_ + current_offset << std::endl;
-      }
       current_offset += in_array.nbytes();
     }
 
@@ -413,10 +405,6 @@ class NCCLGroup : public GroupImpl {
           out_array.nbytes(),
           cudaMemcpyDeviceToDevice,
           encoder.stream()));
-      if (rank_ == 0) {
-        std::cout<< "out ptr " << out_array.data<T>() << std::endl;
-        std::cout<< "out workspace ptr" << workspace_buffer_ + current_offset << std::endl;
-      }
       current_offset += out_array.nbytes();
     }
   }
