@@ -267,6 +267,7 @@ class NCCLGroup : public GroupImpl {
     // Allocate buffer
     if (workspace_size_ > 0) {
       CHECK_NCCL(ncclMemAlloc(&workspace_buffer_, workspace_size_));
+    }
   }
 
   void* get_workspace() const {
