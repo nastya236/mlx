@@ -275,10 +275,13 @@ class NCCLGroup : public GroupImpl {
   }
 
   ~NCCLGroup() {
-    CHECK_NCCL(ncclGroupEnd());
-    CHECK_NCCL(ncclCommDestroy(comm_));
-    CHECK_NCCL(ncclMemFree(workspace_buffer_));
-
+    if (workspace_buffer_) {
+      CHECK_NCCL(ncclMemFree(workspace_buffer_));
+      workspace_buffer_ = nullptr;
+    }
+    if (comm_) {
+      CHECK_NCCL(ncclCommDestroy(comm_));
+    }
     initialized_ = false;
   }
 
