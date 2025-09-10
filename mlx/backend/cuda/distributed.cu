@@ -71,8 +71,8 @@ void AllReduceCoalesced::eval_gpu(
   auto& encoder = cu::get_command_encoder(stream());
   auto capture = encoder.capture_context();
   for (size_t i = 0; i < inputs.size(); ++i) {
-    encoder.set_input_array(inputs[i], i);
-    encoder.set_output_array(outputs[i], i);
+    encoder.set_input_array(inputs[i]);
+    encoder.set_output_array(outputs[i]);
   }
   auto& s = stream();
 
