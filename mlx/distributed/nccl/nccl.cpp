@@ -255,6 +255,7 @@ class NCCLGroup : public GroupImpl {
   }
 
   ~NCCLGroup() {
+    std::cout << "[nccl] Finalizing NCCL backend" << std::endl;
     ncclCommDestroy(comm_);
     initialized_ = false;
   }
