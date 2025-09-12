@@ -5,6 +5,7 @@
 #include "mlx/backend/cuda/device.h"
 #include "mlx/backend/gpu/available.h"
 #include "mlx/primitives.h"
+#include "mlx/scheduler.h"
 
 #include <nvtx3/nvtx3.hpp>
 
@@ -44,6 +45,9 @@ void eval(array& arr) {
   }
   for (auto& s : arr.siblings()) {
     encoder.add_temporary(s);
+  }
+  if (encoder.needs_commit()) {
+    scheduler::notify_new_task(s);
   }
   encoder.maybe_commit();
 }
