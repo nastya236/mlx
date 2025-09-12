@@ -233,7 +233,7 @@ void CommandEncoder::maybe_commit() {
   }
 }
 
-void CommandEncoder::needs_commit() {
+bool CommandEncoder::needs_commit() {
   if (node_count_ >= env::max_ops_per_buffer(default_max_nodes_per_graph)) {
     return true;
   }
