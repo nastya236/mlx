@@ -85,7 +85,8 @@ class CommandEncoder {
   void add_completed_handler(std::function<void()> task);
   void maybe_commit();
   void commit();
-
+  void needs_commit();
+  
   Device& device() {
     return device_;
   }
