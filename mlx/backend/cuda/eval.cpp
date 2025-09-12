@@ -24,6 +24,7 @@ void new_stream(Stream s) {
 
 void eval(array& arr) {
   nvtx3::scoped_range r("gpu::eval");
+  auto s = arr.primitive().stream();
   auto outputs = arr.outputs();
   {
     // If the array is a tracer hold a reference
