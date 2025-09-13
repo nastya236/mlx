@@ -227,11 +227,11 @@ void CommandEncoder::set_output_array(const array& arr) {
   active_outputs_.push_back(id);
 }
 
-void CommandEncoder::maybe_commit() {
-  if (node_count_ >= env::max_ops_per_buffer(default_max_nodes_per_graph)) {
-    commit();
-  }
-}
+// void CommandEncoder::maybe_commit() {
+//   if (node_count_ >= env::max_ops_per_buffer(default_max_nodes_per_graph)) {
+//     commit();
+//   }
+// }
 
 bool CommandEncoder::needs_commit() {
   if (node_count_ >= env::max_ops_per_buffer(default_max_nodes_per_graph)) {

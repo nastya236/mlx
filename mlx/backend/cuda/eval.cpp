@@ -48,9 +48,9 @@ void eval(array& arr) {
     encoder.add_temporary(s);
   }
   if (encoder.needs_commit()) {
-    scheduler::notify_new_task(s);
+    // scheduler::notify_new_task(s);
+    encoder.commit();
   }
-  encoder.maybe_commit();
 }
 
 void finalize(Stream s) {
