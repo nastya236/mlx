@@ -234,7 +234,8 @@ array eval_impl(std::vector<array> outputs, bool async) {
     }
 
     if (scheduler::n_active_tasks() > MAX_ACTIVE_TASKS ||
-        (get_active_memory() > get_memory_limit())) {
+        (get_active_memory() > get_memory_limit() &&
+         scheduler::n_active_tasks() > 0)) {
       // Commit any open streams
       for (auto i : open_streams) {
         auto s = get_stream(i);
