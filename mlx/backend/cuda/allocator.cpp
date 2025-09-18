@@ -164,6 +164,7 @@ void CudaAllocator::cuda_free(CudaBuffer* buf) {
   if (scalar_pool_.in_pool(buf)) {
     scalar_pool_.free(buf);
   } else {
+    std::cout << "Freeing CUDA buffer of size " << buf->size << " bytes\n";
     cudaFree(buf->data);
     delete buf;
   }
