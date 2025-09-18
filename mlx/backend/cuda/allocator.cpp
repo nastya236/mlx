@@ -86,7 +86,7 @@ CudaAllocator::CudaAllocator()
   // TODO: Set memory limit for multi-device.
   size_t free, total;
   CHECK_CUDA_ERROR(cudaMemGetInfo(&free, &total));
-  memory_limit_ = total * 0.9;
+  memory_limit_ = total * 0.95;
   max_pool_size_ = memory_limit_;
 }
 
