@@ -5,7 +5,6 @@
 #include "mlx/backend/cuda/device.h"
 #include "mlx/backend/gpu/available.h"
 #include "mlx/primitives.h"
-#include "mlx/scheduler.h"
 
 #include <nvtx3/nvtx3.hpp>
 
@@ -24,7 +23,6 @@ void new_stream(Stream s) {
 
 void eval(array& arr) {
   nvtx3::scoped_range r("gpu::eval");
-  auto s = arr.primitive().stream();
   auto outputs = arr.outputs();
   {
     // If the array is a tracer hold a reference
@@ -47,10 +45,7 @@ void eval(array& arr) {
   for (auto& s : arr.siblings()) {
     encoder.add_temporary(s);
   }
-  if (encoder.needs_commit()) {
-    // scheduler::notify_new_task(s);
-    encoder.commit();
-  }
+  encoder.maybe_commit();
 }
 
 void finalize(Stream s) {

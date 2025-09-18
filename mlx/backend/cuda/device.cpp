@@ -227,17 +227,10 @@ void CommandEncoder::set_output_array(const array& arr) {
   active_outputs_.push_back(id);
 }
 
-// void CommandEncoder::maybe_commit() {
-//   if (node_count_ >= env::max_ops_per_buffer(default_max_nodes_per_graph)) {
-//     commit();
-//   }
-// }
-
-bool CommandEncoder::needs_commit() {
+void CommandEncoder::maybe_commit() {
   if (node_count_ >= env::max_ops_per_buffer(default_max_nodes_per_graph)) {
-    return true;
+    commit();
   }
-  return false;
 }
 
 void CommandEncoder::add_kernel_node(
@@ -321,12 +314,8 @@ void CommandEncoder::add_graph_node(cudaGraph_t child) {
 
 void CommandEncoder::commit() {
   nvtx3::scoped_range r("CommandEncoder::commit");
-
-  auto s = stream();
   if (!temporaries_.empty()) {
-    add_completed_handler([s, temporaries = std::move(temporaries_)]() {
-      scheduler::notify_task_completion(s);
-    });
+    add_completed_handler([temporaries = std::move(temporaries_)]() {});
   }
   if (node_count_ > 0) {
     if (!from_nodes_.empty()) {
