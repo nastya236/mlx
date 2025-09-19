@@ -1,12 +1,12 @@
 // Copyright © 2025 Apple Inc.
 
 #include "mlx/backend/cuda/allocator.h"
-#include "mlx/backend/cuda/utils.h"
-#include "mlx/utils.h"
-#include <iostream>
 #include <cuda_runtime.h>
 #include <fmt/format.h>
 #include <unistd.h>
+#include <iostream>
+#include "mlx/backend/cuda/utils.h"
+#include "mlx/utils.h"
 
 #include <cassert>
 
@@ -168,6 +168,8 @@ void CudaAllocator::cuda_free(CudaBuffer* buf) {
   if (scalar_pool_.in_pool(buf)) {
     scalar_pool_.free(buf);
   } else {
+    std::cout << "Freeing CUDA buffer of size " << buf->size << " bytes\n";
+
     cudaFree(buf->data);
     delete buf;
   }
