@@ -16,7 +16,6 @@ bool is_available() {
 
 void new_stream(Stream s) {
   // Force initalization of cuda, so cuda runtime get destroyed at last.
-  std::cout << "Initializing CUDA runtime with cuda free" << std::endl;
   cudaFree(nullptr);
   // Ensure the static stream objects get created.
   cu::get_command_encoder(s);

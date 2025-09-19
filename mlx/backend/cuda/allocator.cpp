@@ -105,9 +105,11 @@ Buffer CudaAllocator::malloc(size_t size) {
   CudaBuffer* buf = buffer_cache_.reuse_from_cache(size);
   if (!buf) {
     // If we have a lot of memory pressure try to reclaim memory from the cache.
+    std::cout << "Allocating new buffer of size " << size << std::endl;
     int64_t mem_to_free =
         get_active_memory() + get_cache_memory() + size - memory_limit_;
     if (mem_to_free > 0) {
+      std::cout << "Memory pressure " << mem_to_free << std::endl;
       buffer_cache_.release_cached_buffers(mem_to_free);
     }
 
@@ -163,7 +165,6 @@ void CudaAllocator::cuda_free(CudaBuffer* buf) {
   if (scalar_pool_.in_pool(buf)) {
     scalar_pool_.free(buf);
   } else {
-    std::cout << "Freeing buffer of size " << buf->size << std::endl;
     cudaFree(buf->data);
     delete buf;
   }
