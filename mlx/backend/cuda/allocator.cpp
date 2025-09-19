@@ -49,7 +49,7 @@ SmallSizePool::SmallSizePool() {
 }
 
 SmallSizePool::~SmallSizePool() {
-  std::cout << "Freeing buffer in SmallSizePool " << buf->size << std::endl;
+  std::cout << "Freeing buffer in SmallSizePool " << std::endl;
   CHECK_CUDA_ERROR(cudaFree(data_));
   delete[] buffer_;
 }
