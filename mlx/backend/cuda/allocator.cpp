@@ -49,7 +49,6 @@ SmallSizePool::SmallSizePool() {
 }
 
 SmallSizePool::~SmallSizePool() {
-  std::cout << "Freeing buffer in SmallSizePool " << std::endl;
   CHECK_CUDA_ERROR(cudaFree(data_));
   delete[] buffer_;
 }
@@ -142,13 +141,11 @@ void CudaAllocator::free(Buffer buffer) {
   if (!buf) {
     return;
   }
-
   std::unique_lock lock(mutex_);
   active_memory_ -= buf->size;
   if (get_cache_memory() < max_pool_size_) {
     buffer_cache_.recycle_to_cache(buf);
   } else {
-    std::cout << "Freeing buffer in allocator::free " << buf->size << std::endl;
     cuda_free(buf);
   }
 }
@@ -166,6 +163,7 @@ void CudaAllocator::cuda_free(CudaBuffer* buf) {
   if (scalar_pool_.in_pool(buf)) {
     scalar_pool_.free(buf);
   } else {
+    std::cout << "Freeing buffer of size " << buf->size << std::endl;
     cudaFree(buf->data);
     delete buf;
   }
