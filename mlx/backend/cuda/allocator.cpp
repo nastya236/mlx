@@ -144,13 +144,15 @@ void CudaAllocator::free(Buffer buffer) {
 
   std::unique_lock lock(mutex_);
   active_memory_ -= buf->size;
+  std::cout << "Freeing buffer of size " << buf->size << " bytes\n";
+  std::cout << "Active memory: " << get_active_memory() << " bytes\n";
+  std::cout << "Cache memory: " << get_cache_memory() << " bytes\n";
+  std::cout << "Memory limit: " << max_pool_size_ << " bytes\n";
   if (get_cache_memory() < max_pool_size_) {
+    std::cout << "Recycling to cache\n";
     buffer_cache_.recycle_to_cache(buf);
   } else {
-    std::cout << "Freeing buffer of size " << buf->size << " bytes\n";
-    std::cout << "Active memory: " << get_active_memory() << " bytes\n";
-    std::cout << "Cache memory: " << get_cache_memory() << " bytes\n";
-    std::cout << "Memory limit: " << max_pool_size_ << " bytes\n";
+    std::cout << "Not recycling to cache\n";
     cuda_free(buf);
   }
 }
@@ -168,8 +170,6 @@ void CudaAllocator::cuda_free(CudaBuffer* buf) {
   if (scalar_pool_.in_pool(buf)) {
     scalar_pool_.free(buf);
   } else {
-    std::cout << "Freeing CUDA buffer of size " << buf->size << " bytes\n";
-
     cudaFree(buf->data);
     delete buf;
   }
