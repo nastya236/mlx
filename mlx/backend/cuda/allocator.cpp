@@ -21,7 +21,7 @@ constexpr int small_block_size = 8;
 
 // The small pool size in bytes. This should be a multiple of the host page
 // size and small_block_size.
-constexpr int small_pool_size = 16 * page_size;
+constexpr int small_pool_size = 4 * page_size;
 
 SmallSizePool::SmallSizePool() {
   auto num_blocks = small_pool_size / small_block_size;
@@ -86,7 +86,7 @@ CudaAllocator::CudaAllocator()
   // TODO: Set memory limit for multi-device.
   size_t free, total;
   CHECK_CUDA_ERROR(cudaMemGetInfo(&free, &total));
-  memory_limit_ = total * 0.95;
+  memory_limit_ = total * 0.99;
   max_pool_size_ = memory_limit_;
 }
 
