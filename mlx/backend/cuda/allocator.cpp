@@ -106,6 +106,9 @@ Buffer CudaAllocator::malloc(size_t size) {
   if (!buf) {
     // If we have a lot of memory pressure try to reclaim memory from the cache.
     std::cout << "Allocating new buffer of size " << size << std::endl;
+    std::cout << "Active memory: " << get_active_memory()
+              << " Cache memory: " << get_cache_memory()
+              << " Memory limit: " << memory_limit_ << std::endl;
     int64_t mem_to_free =
         get_active_memory() + get_cache_memory() + size - memory_limit_;
     if (mem_to_free > 0) {
