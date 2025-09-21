@@ -21,7 +21,7 @@ constexpr int small_block_size = 8;
 
 // The small pool size in bytes. This should be a multiple of the host page
 // size and small_block_size.
-constexpr int small_pool_size = 32 * page_size;
+constexpr int small_pool_size = 4 * page_size;
 
 SmallSizePool::SmallSizePool() {
   auto num_blocks = small_pool_size / small_block_size;
@@ -105,14 +105,9 @@ Buffer CudaAllocator::malloc(size_t size) {
   CudaBuffer* buf = buffer_cache_.reuse_from_cache(size);
   if (!buf) {
     // If we have a lot of memory pressure try to reclaim memory from the cache.
-    std::cout << "Allocating new buffer of size " << size << std::endl;
-    std::cout << "Active memory: " << get_active_memory()
-              << " Cache memory: " << get_cache_memory()
-              << " Memory limit: " << memory_limit_ << std::endl;
     int64_t mem_to_free =
         get_active_memory() + get_cache_memory() + size - memory_limit_;
     if (mem_to_free > 0) {
-      std::cout << "Memory pressure " << mem_to_free << std::endl;
       buffer_cache_.release_cached_buffers(mem_to_free);
     }
 
