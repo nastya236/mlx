@@ -178,7 +178,7 @@ class BufferCache {
   std::function<size_t(T*)> get_size_;
   std::function<void(T*)> free_;
   // Statistics for debuging
-  std::map<int, int> counts;
+  std::map<int, int> counts_;
 };
 
 } // namespace mlx::core
