@@ -30,12 +30,10 @@ class BufferCache {
   T* reuse_from_cache(size_t size) {
     // Find the closest buffer in pool.
     auto it = buffer_pool_.lower_bound(size);
-    // print_stats();
 
     if (it == buffer_pool_.end() ||
         it->first >= std::min(2 * size, size + 2 * page_size_)) {
-      // std::cout << "No suitable buffer found " << size << std::endl;
-      print_stats();
+      // print_stats();
       return nullptr;
     }
 
