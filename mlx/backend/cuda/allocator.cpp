@@ -108,9 +108,7 @@ Buffer CudaAllocator::malloc(size_t size) {
     // Assume that we allocate enough small blocks that we never need to
     // allocate more.
     buf = scalar_pool_.malloc();
-  }
-
-  if (size > small_block_size || !buf) {
+  else {
     buf = buffer_cache_.reuse_from_cache(size);
 
     if (!buf) {
