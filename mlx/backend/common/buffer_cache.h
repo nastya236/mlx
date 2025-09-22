@@ -4,8 +4,8 @@
 
 #include <cassert>
 #include <functional>
-#include <map>
 #include <iostream>
+#include <map>
 
 namespace mlx::core {
 
@@ -126,7 +126,9 @@ class BufferCache {
 
   void print_stats() const {
     for (const auto& [size, count] : counts_) {
-      std::cout << "Size: " << size << ", Count: " << count << std::endl;
+      std::cout << "Size: " << static_cast<unsigned long long>(size)
+                << ", Count: " << static_cast<unsigned long long>(count)
+                << std::endl;
     }
   }
 
@@ -178,7 +180,7 @@ class BufferCache {
   std::function<size_t(T*)> get_size_;
   std::function<void(T*)> free_;
   // Statistics for debuging
-  std::map<int, int> counts_;
+  std::map<size_t, size_t> counts_;
 };
 
 } // namespace mlx::core
