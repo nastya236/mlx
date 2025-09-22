@@ -29,8 +29,14 @@ class BufferCache {
   T* reuse_from_cache(size_t size) {
     // Find the closest buffer in pool.
     auto it = buffer_pool_.lower_bound(size);
+
+    std::cout << "Looking for buffer of size " << size << std::endl;
+    std::cout << "Available buffers: " << std::endl;
+    print_stats();
+
     if (it == buffer_pool_.end() ||
         it->first >= std::min(2 * size, size + 2 * page_size_)) {
+      std::cout << "No suitable buffer found." << std::endl;
       return nullptr;
     }
 
@@ -38,6 +44,7 @@ class BufferCache {
     T* buf = it->second->buf;
     pool_size_ -= it->first;
 
+    dec_count_(it->first);
     // Remove from record.
     remove_from_list(it->second);
     buffer_pool_.erase(it);
@@ -52,6 +59,7 @@ class BufferCache {
     size_t size = get_size_(buf);
     pool_size_ += size;
     buffer_pool_.emplace(size, bh);
+    counts_[size] += 1;
   }
 
   int release_cached_buffers(size_t min_bytes_to_free) {
@@ -74,6 +82,7 @@ class BufferCache {
           return el.second == tail_;
         });
         assert(it != buffer_pool_.end());
+        dec_count_(size);
         buffer_pool_.erase(it);
         remove_from_list(tail_);
       }
@@ -91,6 +100,7 @@ class BufferCache {
       delete holder;
     }
     buffer_pool_.clear();
+    counts_.clear();
     pool_size_ = 0;
     head_ = nullptr;
     tail_ = nullptr;
@@ -103,6 +113,20 @@ class BufferCache {
 
   size_t page_size() const {
     return page_size_;
+  }
+
+  void dec_count_(size_t size) {
+    auto it = counts_.find(size);
+    if (it != counts_.end()) {
+      if (--(it->second) == 0)
+        counts_.erase(it);
+    }
+  }
+
+  void print_stats() const {
+    for (const auto& [size, count] : counts_) {
+      std::cout << "Size: " << size << ", Count: " << count << std::endl;
+    }
   }
 
  private:
@@ -152,6 +176,8 @@ class BufferCache {
   const size_t page_size_;
   std::function<size_t(T*)> get_size_;
   std::function<void(T*)> free_;
+  // Statistics for debuging
+  std::map<int, int> counts;
 };
 
 } // namespace mlx::core

@@ -86,7 +86,7 @@ CudaAllocator::CudaAllocator()
   // TODO: Set memory limit for multi-device.
   size_t free, total;
   CHECK_CUDA_ERROR(cudaMemGetInfo(&free, &total));
-  memory_limit_ = total * 0.99;
+  memory_limit_ = total * 0.95;
   max_pool_size_ = memory_limit_;
 }
 
@@ -105,6 +105,10 @@ Buffer CudaAllocator::malloc(size_t size) {
   CudaBuffer* buf = buffer_cache_.reuse_from_cache(size);
   if (!buf) {
     // If we have a lot of memory pressure try to reclaim memory from the cache.
+    std::cout << 'no size of ' << size
+              << " in cache, active: " << get_active_memory()
+              << ", cache: " << get_cache_memory()
+              << ", limit: " << memory_limit_ << '\n';
     int64_t mem_to_free =
         get_active_memory() + get_cache_memory() + size - memory_limit_;
     if (mem_to_free > 0) {
@@ -141,6 +145,7 @@ void CudaAllocator::free(Buffer buffer) {
   if (!buf) {
     return;
   }
+
   std::unique_lock lock(mutex_);
   active_memory_ -= buf->size;
   if (get_cache_memory() < max_pool_size_) {
