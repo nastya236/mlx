@@ -124,7 +124,7 @@ Buffer CudaAllocator::malloc(size_t size) {
 
       lock.unlock();
       buf = new CudaBuffer{nullptr, size};
-      std::cout << "Allocating new buffer of size " << size << std::endl;
+      // std::cout << "Allocating new buffer of size " << size << std::endl;
       cudaError_t err = cudaMallocManaged(&buf->data, size);
       if (err != cudaSuccess && err != cudaErrorMemoryAllocation) {
         throw std::runtime_error(fmt::format(

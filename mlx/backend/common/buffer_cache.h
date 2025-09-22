@@ -34,8 +34,8 @@ class BufferCache {
 
     if (it == buffer_pool_.end() ||
         it->first >= std::min(2 * size, size + 2 * page_size_)) {
-      std::cout << "No suitable buffer found " << size << std::endl;
-      print_stats();
+      // std::cout << "No suitable buffer found " << size << std::endl;
+      // print_stats();
       return nullptr;
     }
 
