@@ -33,7 +33,7 @@ class BufferCache {
 
     std::cout << "Looking for buffer of size " << size << std::endl;
     std::cout << "Available buffers: " << std::endl;
-    print_stats();
+    // print_stats();
 
     if (it == buffer_pool_.end() ||
         it->first >= std::min(2 * size, size + 2 * page_size_)) {
