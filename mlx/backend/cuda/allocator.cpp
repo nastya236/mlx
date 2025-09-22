@@ -1,12 +1,13 @@
 // Copyright © 2025 Apple Inc.
 
 #include "mlx/backend/cuda/allocator.h"
+#include "mlx/backend/cuda/utils.h"
+#include "mlx/utils.h"
+
 #include <cuda_runtime.h>
 #include <fmt/format.h>
 #include <unistd.h>
 #include <iostream>
-#include "mlx/backend/cuda/utils.h"
-#include "mlx/utils.h"
 
 #include <cassert>
 
@@ -94,7 +95,6 @@ Buffer CudaAllocator::malloc(size_t size) {
   // Find available buffer from cache.
   auto orig_size = size;
   std::unique_lock lock(mutex_);
-
   if (size <= small_block_size) {
     size = small_block_size;
   } else if (size < page_size) {
@@ -102,36 +102,32 @@ Buffer CudaAllocator::malloc(size_t size) {
   } else {
     size = page_size * ((size + page_size - 1) / page_size);
   }
-  CudaBuffer* buf = nullptr;
 
-  if (size == small_block_size) {
-    // Assume that we allocate enough small blocks that we never need to
-    // allocate more.
-    buf = scalar_pool_.malloc();
-  } else {
-    buf = buffer_cache_.reuse_from_cache(size);
+  CudaBuffer* buf = buffer_cache_.reuse_from_cache(size);
+  if (!buf) {
+    // If we have a lot of memory pressure try to reclaim memory from the cache.
+    int64_t mem_to_free =
+        get_active_memory() + get_cache_memory() + size - memory_limit_;
+    if (mem_to_free > 0) {
+      buffer_cache_.release_cached_buffers(mem_to_free);
+    }
 
+    // Try the scalar pool first
+    if (size <= small_block_size) {
+      buf = scalar_pool_.malloc();
+    }
+    lock.unlock();
     if (!buf) {
-      // If we have a lot of memory pressure try to reclaim memory from the
-      // cache.
-      int64_t mem_to_free =
-          get_active_memory() + get_cache_memory() + size - memory_limit_;
-      if (mem_to_free > 0) {
-        buffer_cache_.release_cached_buffers(mem_to_free);
-      }
-
-      lock.unlock();
       buf = new CudaBuffer{nullptr, size};
-      // std::cout << "Allocating new buffer of size " << size << std::endl;
+      std::cout << "Allocating new buffer of size " << size << std::endl;
       cudaError_t err = cudaMallocManaged(&buf->data, size);
       if (err != cudaSuccess && err != cudaErrorMemoryAllocation) {
         throw std::runtime_error(fmt::format(
             "cudaMallocManaged failed: {}.", cudaGetErrorString(err)));
       }
-      lock.lock();
     }
+    lock.lock();
   }
-
   active_memory_ += size;
   peak_memory_ = std::max(active_memory_, peak_memory_);
 
@@ -144,8 +140,9 @@ Buffer CudaAllocator::malloc(size_t size) {
 
 void CudaAllocator::free(Buffer buffer) {
   auto* buf = static_cast<CudaBuffer*>(buffer.ptr());
-  if (!buf)
+  if (!buf) {
     return;
+  }
 
   std::unique_lock lock(mutex_);
   active_memory_ -= buf->size;
