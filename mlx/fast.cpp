@@ -810,6 +810,7 @@ array scaled_dot_product_attention(
             stream, fallback, scale, do_causal, has_sinks),
         std::move(inputs));
   }
+  std::cout << "fallback" <<std::endl;
   return fallback(std::move(inputs))[0];
 }
 
