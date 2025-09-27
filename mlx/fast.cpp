@@ -6,6 +6,7 @@
 #include "mlx/fast_primitives.h"
 #include "mlx/ops.h"
 #include "mlx/transforms.h"
+#include <iostream>
 
 namespace mlx::core::fast {
 
@@ -801,6 +802,7 @@ array scaled_dot_product_attention(
   if (!ScaledDotProductAttention::use_fallback(
           q, k, v, has_mask, has_arr_mask, do_causal, stream)) {
     auto out_shape = Shape{q.shape(0), q.shape(1), q.shape(2), v.shape(-1)};
+    std::cout << "no fallback" <<std::endl;
     return array(
         std::move(out_shape),
         final_type,
