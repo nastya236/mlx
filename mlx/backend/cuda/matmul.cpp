@@ -6,7 +6,7 @@
 #include "mlx/backend/cuda/gemms/gemv.h"
 #include "mlx/backend/gpu/copy.h"
 #include "mlx/primitives.h"
-
+#include <iostream>
 #include <nvtx3/nvtx3.hpp>
 #include <numeric>
 
@@ -19,11 +19,15 @@ check_transpose(cu::CommandEncoder& enc, const Stream& s, const array& arr) {
   auto stx = arr.strides()[arr.ndim() - 2];
   auto sty = arr.strides()[arr.ndim() - 1];
   if (sty == 1 && stx == arr.shape(-1)) {
+    std::cout << "No transpose needed\n";
     return std::make_tuple(false, stx, arr);
   } else if (stx == 1 && sty == arr.shape(-2)) {
+    std::cout << "Transpose needed\n";
     return std::make_tuple(true, sty, arr);
   } else {
+    
     array arr_copy = contiguous_copy_gpu(arr, s);
+    std::cout << "Copying and transposing\n";
     enc.add_temporary(arr_copy);
     return std::make_tuple(false, arr.shape(-1), arr_copy);
   }
