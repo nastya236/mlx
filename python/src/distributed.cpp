@@ -307,7 +307,7 @@ void init_distributed(nb::module_& parent_module) {
       [](const nb::object tree,
           std::optional<mx::distributed::Group> group,
           mx::StreamOrDevice s) {
-        std::vector<mx::array> xs = tree_flatten(pytree);
+        std::vector<mx::array> xs = tree_flatten(tree);
         std::vector<mx::array> ys = mx::distributed::all_sum_coalesced(xs, group, s);
         return tree_unflatten(tree, ys);
       },
