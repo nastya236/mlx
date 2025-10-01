@@ -267,7 +267,7 @@ class NCCLGroup : public GroupImpl {
     CHECK_CUDA(
         cudaStreamCreateWithFlags(&copy_in_stream_, cudaStreamNonBlocking));
     CHECK_CUDA(
-        cudaStreamCreateWithFlags(&comm_out_stream_, cudaStreamNonBlocking));
+        cudaStreamCreateWithFlags(&copy_out_stream_, cudaStreamNonBlocking));
 
     initialized_ = true;
     // Allocate NCCL workspace
@@ -378,6 +378,7 @@ class NCCLGroup : public GroupImpl {
       Stream stream,
       ncclDataType_t dt,
       ncclRedOp_t op) {
+
     auto& encoder = cu::get_command_encoder(stream);
     auto& dev = cu::Device::device(stream.device);
 
@@ -385,30 +386,6 @@ class NCCLGroup : public GroupImpl {
     for (const auto& arr : inputs)
       total_nbytes += arr.nbytes();
 
-    // for simplicity for now pack by arrays, not by bytes
-    auto pack_group = [&](int start, int end, size_t off, cudaStream_t s) {
-      for (int j = start; j < end; ++j) {
-        CHECK_CUDA(cudaMemcpyAsync(
-            workspace_buffer_ + off,
-            inputs[j].data<void>(),
-            inputs[j].nbytes(),
-            cudaMemcpyDeviceToDevice,
-            s));
-        off += inputs[j].nbytes();
-      }
-    };
-
-    auto unpack_group = [&](int start, int end, size_t off, cudaStream_t s) {
-      for (int j = start; j < end; ++j) {
-        CHECK_CUDA(cudaMemcpyAsync(
-            outputs[j].data<void>(),
-            workspace_buffer_ + off,
-            outputs[j].nbytes(),
-            cudaMemcpyDeviceToDevice,
-            s));
-        off += outputs[j].nbytes();
-      }
-    };
     // questionable
     if (workspace_size_ < total_nbytes) {
       throw std::runtime_error(
@@ -418,10 +395,11 @@ class NCCLGroup : public GroupImpl {
     const int n_chunks = std::min(N, 8);
 
     size_t current_offset = 0;
+
     if (n_chunks < 5) {
       // old logic, no pipelining
       for (const auto& in_array : inputs) {
-        while
+
           CHECK_CUDA(cudaMemcpyAsync(
               workspace_buffer_ + current_offset,
               in_array.data<T>(),
@@ -453,7 +431,8 @@ class NCCLGroup : public GroupImpl {
             encoder.stream()));
         current_offset += out_array.nbytes();
       }
-    } else {
+    } 
+    else {
       auto make_events = [&](int n) {
         std::vector<cu::CudaEvent> v;
         v.reserve(n);
@@ -504,13 +483,13 @@ class NCCLGroup : public GroupImpl {
               workspace_buffer_ + begin_chunk + offset,
               outputs[j].nbytes(),
               cudaMemcpyDeviceToDevice,
-              encoder.stream()));
+              copy_out_stream_));
           offset += outputs[j].nbytes();
         }
-        unpack_events[i].record(encoder.stream());
-        copy_in_stream_.wait(unpack_events[i]);
 
         begin_chunk += chunk_nbytes;
+        unpack_events[i].record(encoder.stream());
+        copy_out_stream_.wait(unpack_events[i]);
       }
     }
   }
@@ -530,7 +509,7 @@ std::vector<cudaStream_t> streams_;
 // copy streams, reduction in the main stream
 
 cudaStream_t copy_in_stream_{nullptr};
-cudaStream_t comm_out_stream_{nullptr};
+cudaStream_t copy_out_stream_{nullptr};
 };
 
 bool is_available() {
