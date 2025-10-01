@@ -293,9 +293,13 @@ class NCCLGroup : public GroupImpl {
       CHECK_NCCL(ncclCommDestroy(comm_));
     }
     initialized_ = false;
-    if (comm_stream_) {
-      CHECK_CUDA(cudaStreamDestroy(comm_stream_));
-      comm_stream_ = nullptr;
+    if (copy_in_stream_) {
+      CHECK_CUDA(cudaStreamDestroy(copy_in_stream_));
+      copy_in_stream_ = nullptr;
+    }
+    if (copy_out_stream_) {
+      CHECK_CUDA(cudaStreamDestroy(copy_out_stream_));
+      copy_out_stream_ = nullptr;
     }
   }
 
