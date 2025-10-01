@@ -256,6 +256,7 @@ class NCCLGroup : public GroupImpl {
         initMethod_(initMethod),
         copy_in_stream_{nullptr},
         comm_out_stream_{nullptr} {
+
     if (initialized_)
       return;
     int ndev;
@@ -493,7 +494,6 @@ class NCCLGroup : public GroupImpl {
       }
     }
   }
-}
 
 int rank_,
     size_;
