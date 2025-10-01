@@ -11,6 +11,7 @@
 #include "mlx/distributed/ops.h"
 #include "python/src/small_vector.h"
 #include "python/src/utils.h"
+#include "python/src/trees.h"
 
 namespace mx = mlx::core;
 namespace nb = nanobind;
@@ -301,20 +302,31 @@ void init_distributed(nb::module_& parent_module) {
         Returns:
           array: The array that was received from ``src``.
       )pbdoc");
-      m.def(
-        "all_sum_coalesced",
-        [](const std::vector<mx::array>& xs,
-           std::optional<mx::distributed::Group> group,
-           mx::StreamOrDevice s) {
-          return mx::distributed::all_sum_coalesced(xs, group, s);
-        },
-        "xs"_a,
-        nb::kw_only(),
-        "group"_a = nb::none(),
-        "stream"_a = nb::none(),
-        nb::sig(
-            "def all_sum_coalesced(xs: List[array], *, group: Optional[Group] = None, stream: Union[None, Stream, Device] = None) -> List[array]"),
-        R"pbdoc(
-          All reduce sum on a list of arrays. 
-      )pbdoc");
+  m.def(
+      "all_sum_coalesced",
+      [](const nb::object tree,
+          std::optional<mx::distributed::Group> group,
+          mx::StreamOrDevice s) {
+        std::vector<mx::array> xs = tree_flatten(pytree);
+        std::vector<mx::array> ys = mx::distributed::all_sum_coalesced(xs, group, s);
+        return tree_unflatten(tree, ys);
+      },
+      "tree"_a,
+      nb::kw_only(),
+      "group"_a = nb::none(),
+      "stream"_a = nb::none(),
+      nb::sig(
+          "def all_sum_coalesced(tree: object, *, group: Optional[Group] = None, stream: Union[None, Stream, Device] = None) -> object"),
+      R"pbdoc(
+        All reduce sum for a tree of arrays.  
+        Args:
+          tree (object): A pytree of arrays.
+          group (Group): The group of processes that will participate in the
+            reduction. If set to ``None`` the global group is used. Default:
+            ``None``.
+          stream (Stream, optional): Stream or device. Defaults to ``None``
+            in which case the default stream of the default device is used.
+        Returns:
+          object: A pytree with the same structure as ``tree`` containing the sum of all arrays.
+      )pbdoc"); 
 }
