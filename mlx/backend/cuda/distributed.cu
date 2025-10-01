@@ -58,18 +58,22 @@ void AllReduce::eval_gpu(
 void AllReduceCoalesced::eval_gpu(
     const std::vector<array>& inputs,
     std::vector<array>& outputs) {
+  assert(inputs.size() == outputs.size());
+  assert(!inputs.empty());
+
+
 
   assert(inputs.size() == outputs.size());
   for (size_t i = 0; i < inputs.size(); ++i) {
     outputs[i].copy_shared_buffer(inputs[i]);
   }
 
-  // auto& encoder = cu::get_command_encoder(stream());
-  // auto capture = encoder.capture_context();
-  // for (size_t i = 0; i < inputs.size(); ++i) {
-  //   encoder.set_input_array(inputs[i]);
-  //   encoder.set_output_array(outputs[i]);
-  // }
+  auto& encoder = cu::get_command_encoder(stream());
+  auto capture = encoder.capture_context();
+  for (size_t i = 0; i < inputs.size(); ++i) {
+    encoder.set_input_array(inputs[i]);
+    encoder.set_output_array(outputs[i]);
+  }
   auto& s = stream();
 
   switch (reduce_type_) {
