@@ -375,7 +375,7 @@ class NCCLGroup : public GroupImpl {
       ncclRedOp_t op) {
 
     auto& encoder = cu::get_command_encoder(stream);
-    cu::CudaEvent event(stream.device, cudaEventDisableTiming);
+    cu::CudaEvent event(cu::device(stream.device), cudaEventDisableTiming);
 
     event.record(encoder.stream());
     event.wait(comm_stream_);
