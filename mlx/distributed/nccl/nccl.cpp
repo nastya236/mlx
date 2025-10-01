@@ -13,6 +13,7 @@
 #include <string>
 #include <type_traits>
 
+#include "mlx/backend/cuda/cuda.h"
 #include "mlx/backend/cuda/device.h"
 #include "mlx/distributed/distributed.h"
 #include "mlx/distributed/distributed_impl.h"
@@ -252,7 +253,9 @@ class NCCLGroup : public GroupImpl {
       : rank_(worldRank),
         size_(worldSize),
         comm_(nullptr),
-        initMethod_(initMethod) {
+        initMethod_(initMethod),
+        copy_in_stream_{nullptr},
+        comm_out_stream_{nullptr} {
     if (initialized_)
       return;
     int ndev;
@@ -260,6 +263,12 @@ class NCCLGroup : public GroupImpl {
     CHECK_CUDA(cudaSetDevice(rank_ % ndev));
     detail::bootstrap_unique_id(uniqueId_, rank_, size_, initMethod_);
     CHECK_NCCL(ncclCommInitRank(&comm_, size_, uniqueId_, rank_));
+    // Span a stream just in case
+    CHECK_CUDA(
+        cudaStreamCreateWithFlags(&copy_in_stream_, cudaStreamNonBlocking));
+    CHECK_CUDA(
+        cudaStreamCreateWithFlags(&comm_out_stream_, cudaStreamNonBlocking));
+
     initialized_ = true;
     // Allocate NCCL workspace
     workspace_size_ = detail::get_workspace_size();
@@ -283,6 +292,10 @@ class NCCLGroup : public GroupImpl {
       CHECK_NCCL(ncclCommDestroy(comm_));
     }
     initialized_ = false;
+    if (comm_stream_) {
+      CHECK_CUDA(cudaStreamDestroy(comm_stream_));
+      comm_stream_ = nullptr;
+    }
   }
 
   Stream communication_stream(StreamOrDevice s) override {
@@ -346,8 +359,8 @@ class NCCLGroup : public GroupImpl {
       Stream stream,
       ncclDataType_t dt,
       ncclRedOp_t op) {
-
     auto& encoder = cu::get_command_encoder(stream);
+
     CHECK_NCCL(ncclAllReduce(
         input.data<T>(),
         output.data<T>(),
@@ -365,62 +378,159 @@ class NCCLGroup : public GroupImpl {
       Stream stream,
       ncclDataType_t dt,
       ncclRedOp_t op) {
-
     auto& encoder = cu::get_command_encoder(stream);
+    auto& dev = cu::Device::device(stream.device);
 
     size_t total_nbytes = 0;
-    for (const auto& arr : inputs) {
+    for (const auto& arr : inputs)
       total_nbytes += arr.nbytes();
-    }
+
+    // for simplicity for now pack by arrays, not by bytes
+    auto pack_group = [&](int start, int end, size_t off, cudaStream_t s) {
+      for (int j = start; j < end; ++j) {
+        CHECK_CUDA(cudaMemcpyAsync(
+            workspace_buffer_ + off,
+            inputs[j].data<void>(),
+            inputs[j].nbytes(),
+            cudaMemcpyDeviceToDevice,
+            s));
+        off += inputs[j].nbytes();
+      }
+    };
+
+    auto unpack_group = [&](int start, int end, size_t off, cudaStream_t s) {
+      for (int j = start; j < end; ++j) {
+        CHECK_CUDA(cudaMemcpyAsync(
+            outputs[j].data<void>(),
+            workspace_buffer_ + off,
+            outputs[j].nbytes(),
+            cudaMemcpyDeviceToDevice,
+            s));
+        off += outputs[j].nbytes();
+      }
+    };
     // questionable
     if (workspace_size_ < total_nbytes) {
       throw std::runtime_error(
           "[nccl] Workspace size is smaller than the total size of gradients.");
     }
+    int N = static_cast<int>(inputs.size());
+    const int n_chunks = std::min(N, 8);
 
     size_t current_offset = 0;
+    if (n_chunks < 5) {
+      // old logic, no pipelining
+      for (const auto& in_array : inputs) {
+        while
+          CHECK_CUDA(cudaMemcpyAsync(
+              workspace_buffer_ + current_offset,
+              in_array.data<T>(),
+              in_array.nbytes(),
+              cudaMemcpyDeviceToDevice,
+              encoder.stream()));
+        current_offset += in_array.nbytes();
+      }
 
-    for (const auto& in_array : inputs) {
-      CHECK_CUDA(cudaMemcpyAsync(
-        workspace_buffer_ + current_offset,
-          in_array.data<T>(),
-          in_array.nbytes(),
-          cudaMemcpyDeviceToDevice,
+      size_t total_count = total_nbytes / sizeof(T);
+
+      CHECK_NCCL(ncclAllReduce(
+          workspace_buffer_,
+          workspace_buffer_,
+          total_count,
+          dt,
+          ncclSum,
+          comm_,
           encoder.stream()));
-      current_offset += in_array.nbytes();
-    }
 
-    size_t total_count = total_nbytes / sizeof(T);
-    CHECK_NCCL(ncclAllReduce(
-        workspace_buffer_,
-        workspace_buffer_,
-        total_count,
-        dt,
-        ncclSum,
-        comm_,
-        encoder.stream()));
+      current_offset = 0;
 
-    current_offset = 0;
-    
-    for (auto& out_array : outputs) {
-      CHECK_CUDA(cudaMemcpyAsync(
-          out_array.data<T>(),
-          workspace_buffer_ + current_offset,
-          out_array.nbytes(),
-          cudaMemcpyDeviceToDevice,
-          encoder.stream()));
-      current_offset += out_array.nbytes();
+      for (auto& out_array : outputs) {
+        CHECK_CUDA(cudaMemcpyAsync(
+            out_array.data<T>(),
+            workspace_buffer_ + current_offset,
+            out_array.nbytes(),
+            cudaMemcpyDeviceToDevice,
+            encoder.stream()));
+        current_offset += out_array.nbytes();
+      }
+    } else {
+      auto make_events = [&](int n) {
+        std::vector<cu::CudaEvent> v;
+        v.reserve(n);
+        for (int i = 0; i < n; ++i)
+          v.emplace_back(dev, cudaEventDisableTiming);
+        return v;
+      };
+
+      auto pack_events = make_events(n_chunks);
+      auto unpack_events = make_events(n_chunks);
+
+      int begin_chunk = 0;
+      int offset = 0;
+
+      for (int i = 0; i < n_chunks; ++i) {
+        int start = (i * N) / n_chunks;
+        int end = ((i + 1) * N) / n_chunks;
+
+        int chunk_nbytes = 0;
+        offset = 0;
+        for (int j = start; j < end; ++j) {
+          CHECK_CUDA(cudaMemcpyAsync(
+              workspace_buffer_ + offset,
+              inputs[j].data<void>(),
+              inputs[j].nbytes(),
+              cudaMemcpyDeviceToDevice,
+              copy_in_stream_));
+          chunk_nbytes += inputs[j].nbytes();
+          offset += chunk_nbytes;
+        }
+
+        pack_events[i].record(copy_in_stream_);
+        encoder.stream().wait(pack_events[i]);
+
+        CHECK_NCCL(ncclAllReduce(
+            workspace_buffer_ + begin_chunk,
+            workspace_buffer_ + begin_chunk,
+            chunk_nbytes / sizeof(T),
+            dt,
+            ncclSum,
+            comm_,
+            encoder.stream()));
+
+        offset = 0;
+        for (int j = start; j < end; ++j) {
+          CHECK_CUDA(cudaMemcpyAsync(
+              outputs[j].data<void>(),
+              workspace_buffer_ + begin_chunk + offset,
+              outputs[j].nbytes(),
+              cudaMemcpyDeviceToDevice,
+              encoder.stream()));
+          offset += outputs[j].nbytes();
+        }
+        unpack_events[i].record(encoder.stream());
+        copy_in_stream_.wait(unpack_events[i]);
+
+        begin_chunk += chunk_nbytes;
+      }
     }
   }
+}
 
-  int rank_, size_;
-  std::string initMethod_;
-  ncclUniqueId uniqueId_;
-  ncclComm_t comm_;
-  bool initialized_ = false;
-  void* workspace_buffer_{nullptr};
-  void* workspace_handle_{nullptr};
-  size_t workspace_size_{0};
+int rank_,
+    size_;
+std::string initMethod_;
+ncclUniqueId uniqueId_;
+ncclComm_t comm_;
+bool initialized_ = false;
+void* workspace_buffer_{nullptr};
+void* workspace_handle_{nullptr};
+size_t workspace_size_{0};
+std::vector<cudaStream_t> streams_;
+
+// copy streams, reduction in the main stream
+
+cudaStream_t copy_in_stream_{nullptr};
+cudaStream_t comm_out_stream_{nullptr};
 };
 
 bool is_available() {
