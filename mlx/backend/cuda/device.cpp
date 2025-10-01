@@ -27,13 +27,6 @@ void check_cudnn_error(const char* name, cudnnStatus_t err) {
   }
 }
 
-int cuda_graph_cache_size() {
-  static int cache_size = []() {
-    return env::get_var("MLX_CUDA_GRAPH_CACHE_SIZE", 400);
-  }();
-  return cache_size;
-}
-
 bool use_cuda_graphs() {
   static bool use_graphs = []() {
     return env::get_var("MLX_USE_CUDA_GRAPHS", true);
@@ -75,8 +68,8 @@ Device::~Device() {
 
 void Device::make_current() {
   // We need to set/get current CUDA device very frequently, cache it to reduce
-  // actual calls of CUDA APIs. This function assumes single-thread in host.
-  static int current = 0;
+  // actual calls of CUDA APIs.
+  static thread_local int current = 0;
   if (current != device_) {
     CHECK_CUDA_ERROR(cudaSetDevice(device_));
     current = device_;
@@ -203,7 +196,8 @@ CommandEncoder::CommandEncoder(Device& d)
     : device_(d),
       stream_(d),
       graph_(d),
-      graph_cache_(cuda_graph_cache_size()) {}
+      worker_(d),
+      graph_cache_("MLX_CUDA_GRAPH_CACHE_SIZE", /* default_capacity */ 400) {}
 
 void CommandEncoder::add_completed_handler(std::function<void()> task) {
   worker_.add_task(std::move(task));
@@ -306,6 +300,7 @@ void CommandEncoder::add_graph_node(cudaGraph_t child) {
     graph_exec.instantiate(child);
     device_.make_current();
     CHECK_CUDA_ERROR(cudaGraphLaunch(graph_exec, stream()));
+    return;
   }
   cudaGraphNode_t node;
   CHECK_CUDA_ERROR(cudaGraphAddChildGraphNode(&node, graph_, NULL, 0, child));

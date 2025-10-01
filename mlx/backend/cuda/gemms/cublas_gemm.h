@@ -55,6 +55,8 @@ class CublasGemm {
       int32_t batch_count,
       int64_t batch_stride);
 
+  void set_bias(cu::CommandEncoder& encoder, const array& bias);
+
   void run(
       cu::CommandEncoder& encoder,
       array& out,
@@ -62,7 +64,8 @@ class CublasGemm {
       const array& b,
       const Shape& batch_shape,
       const Strides& a_batch_strides,
-      const Strides& b_batch_strides);
+      const Strides& b_batch_strides,
+      float alpha = 1.0f);
 
   void run(
       cu::CommandEncoder& encoder,
@@ -85,7 +88,8 @@ class CublasGemm {
       const array& b,
       const Shape& batch_shape,
       const Strides& a_batch_strides,
-      const Strides& b_batch_strides);
+      const Strides& b_batch_strides,
+      float alpha);
 
   void run_batched(
       cu::CommandEncoder& encoder,

@@ -164,8 +164,13 @@ void init_fast(nb::module_& parent_module) {
       R"pbdoc(
         Apply rotary positional encoding to the input.
 
+        The input is expected to be at least 3D with shape ``(B, *, T, D)`` where:
+          * ``B`` is the batch size.
+          * ``T`` is the sequence length.
+          * ``D`` is the feature dimension.
+
         Args:
-            a (array): Input array.
+            a (array): The input array.
             dims (int): The feature dimensions to be rotated. If the input feature
               is larger than dims then the rest is left unchanged.
             traditional (bool): If set to ``True`` choose the traditional
@@ -174,7 +179,9 @@ void init_fast(nb::module_& parent_module) {
               each dimension in the positional encodings. Exactly one of ``base`` and
               ``freqs`` must be ``None``.
             scale (float): The scale used to scale the positions.
-            offset (int or array): The position offset to start at.
+            offset (int or array): The position offset to start at. If an
+              :obj:`array` is given it can be a scalar or vector of ``B``
+              offsets for each example in the batch.
             freqs (array, optional): Optional frequencies to use with RoPE.
               If set, the ``base`` parameter must be ``None``. Default: ``None``.
 
@@ -189,6 +196,7 @@ void init_fast(nb::module_& parent_module) {
          const mx::array& values,
          const float scale,
          const std::variant<std::monostate, std::string, mx::array>& mask,
+         const std::optional<mx::array>& sinks,
          mx::StreamOrDevice s) {
         bool has_mask = !std::holds_alternative<std::monostate>(mask);
         bool has_str_mask =
@@ -205,16 +213,16 @@ void init_fast(nb::module_& parent_module) {
               throw std::invalid_argument(msg.str());
             }
             return mx::fast::scaled_dot_product_attention(
-                queries, keys, values, scale, mask_str, {}, s);
+                queries, keys, values, scale, mask_str, {}, sinks, s);
           } else {
             auto mask_arr = std::get<mx::array>(mask);
             return mx::fast::scaled_dot_product_attention(
-                queries, keys, values, scale, "", {mask_arr}, s);
+                queries, keys, values, scale, "", {mask_arr}, sinks, s);
           }
 
         } else {
           return mx::fast::scaled_dot_product_attention(
-              queries, keys, values, scale, "", {}, s);
+              queries, keys, values, scale, "", {}, sinks, s);
         }
       },
       "q"_a,
@@ -223,9 +231,10 @@ void init_fast(nb::module_& parent_module) {
       nb::kw_only(),
       "scale"_a,
       "mask"_a = nb::none(),
+      "sinks"_a = nb::none(),
       "stream"_a = nb::none(),
       nb::sig(
-          "def scaled_dot_product_attention(q: array, k: array, v: array, *, scale: float,  mask: Union[None, str, array] = None, stream: Union[None, Stream, Device] = None) -> array"),
+          "def scaled_dot_product_attention(q: array, k: array, v: array, *, scale: float,  mask: Union[None, str, array] = None, sinks: Optional[array] = None, stream: Union[None, Stream, Device] = None) -> array"),
       R"pbdoc(
         A fast implementation of multi-head attention: ``O = softmax(Q @ K.T, dim=-1) @ V``.
 
@@ -255,14 +264,17 @@ void init_fast(nb::module_& parent_module) {
             q (array): Queries with shape ``[B, N_q, T_q, D]``.
             k (array): Keys with shape ``[B, N_kv, T_kv, D]``.
             v (array): Values with shape ``[B, N_kv, T_kv, D]``.
-            scale (float): Scale for queries (typically ``1.0 / sqrt(q.shape(-1)``)
-            mask (Union[None, str, array], optional): The mask to apply to the
+            scale (float): Scale for queries (typically ``1.0 / sqrt(q.shape(-1)``).
+            mask (str or array, optional): The mask to apply to the
                query-key scores. The mask can be an array or a string indicating
                the mask type. The only supported string type is ``"causal"``. If
                the mask is an array it can be a boolean or additive mask. The mask
                can have at most 4 dimensions and must be broadcast-compatible with
                the shape ``[B, N, T_q, T_kv]``. If an additive mask is given its
                type must promote to the promoted type of ``q``, ``k``, and ``v``.
+            sinks (array, optional): An optional array of attention sinks.
+               Default: ``None``.
+
         Returns:
             array: The output array.
 

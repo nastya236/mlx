@@ -4,7 +4,6 @@
 #include "mlx/backend/cuda/device/config.h"
 #include "mlx/backend/cuda/device/utils.cuh"
 #include "mlx/backend/cuda/kernel_utils.cuh"
-#include "mlx/backend/cuda/lru_cache.h"
 #include "mlx/backend/gpu/copy.h"
 #include "mlx/dtype_utils.h"
 #include "mlx/fast_primitives.h"
@@ -46,6 +45,7 @@ __global__ void kernel_sdpav_1pass(
     const T* K,
     const T* V,
     T* O,
+    const T* sinks,
     __grid_constant__ const AttnParams params) {
   constexpr int BN = 32;
   constexpr int BD = 32;
@@ -65,7 +65,7 @@ __global__ void kernel_sdpav_1pass(
   __shared__ U max_scores[BN];
   __shared__ U sum_exp_scores[BN];
 
-  const U scale_log2 = params.scale * 1.44269504089f;
+  const U scale_log2 = params.scale * M_LOG2E;
 
   auto block = cg::this_thread_block();
   auto warp = cg::tiled_partition<32>(block);
@@ -108,8 +108,12 @@ __global__ void kernel_sdpav_1pass(
     o[i] = 0.f;
   }
 
-  U max_score = -INFINITY;
+  U max_score = Limits<U>::finite_min();
   U sum_exp_score = 0.f;
+  if (sinks && warp_idx == 0) {
+    max_score = M_LOG2E * static_cast<U>(sinks[head_idx]);
+    sum_exp_score = 1.f;
+  }
 
   // For each key
   for (int i = kv_seq_idx; i < params.kL; i += BN) {
@@ -167,7 +171,7 @@ __global__ void kernel_sdpav_1pass(
   U factor = exp2f(max_score - new_max);
   sum_exp_score =
       cg::reduce(warp, sum_exp_scores[lane_idx] * factor, cg::plus<U>());
-  sum_exp_score = __frcp_rn(sum_exp_score);
+  sum_exp_score = sum_exp_score == 0 ? 0 : __frcp_rn(sum_exp_score);
 
   // Now we need to aggregate all the outputs
   PRAGMA_LOOP_UNROLL
@@ -193,6 +197,7 @@ __global__ void kernel_sdpav_2pass_1(
     const T* Q,
     const T* K,
     const T* V,
+    const T* sinks,
     float* partials,
     float* sums,
     float* maxs,
@@ -268,8 +273,12 @@ __global__ void kernel_sdpav_2pass_1(
     o[i] = 0.f;
   }
 
-  U max_score = -1e9;
+  U max_score = Limits<U>::finite_min();
   U sum_exp_score = 0.f;
+  if (sinks && warp_idx == 0 && block_idx == 0) {
+    max_score = M_LOG2E * static_cast<U>(sinks[head_idx]);
+    sum_exp_score = 1.f;
+  }
 
   // For each key
   for (int i = kv_seq_idx; i < params.kL; i += blocks * BN) {
@@ -410,7 +419,7 @@ __global__ void kernel_sdpav_2pass_2(
   U new_max = cg::reduce(warp, max_score, cg::greater<U>());
   U factor = exp2f(max_score - new_max);
   U sum_exp_score = cg::reduce(warp, sums[lane_idx] * factor, cg::plus<U>());
-  sum_exp_score = __frcp_rn(sum_exp_score);
+  sum_exp_score = sum_exp_score == 0 ? 0 : __frcp_rn(sum_exp_score);
 
   PRAGMA_LOOP_UNROLL
   for (int i = 0; i < v_per_thread; i++) {
@@ -463,10 +472,14 @@ void sdpa_vector_1pass_fallback(
     const array& v,
     const float scale,
     array& o,
-    bool do_causal_ = false) {
+    bool do_causal,
+    const std::optional<array>& sinks) {
   encoder.set_input_array(q);
   encoder.set_input_array(k);
   encoder.set_input_array(v);
+  if (sinks) {
+    encoder.set_input_array(*sinks);
+  }
   encoder.set_output_array(o);
 
   cu::AttnParams params{
@@ -489,7 +502,7 @@ void sdpa_vector_1pass_fallback(
   dim3 block_dim(1024, 1, 1);
 
   dispatch_float_types(o.dtype(), "kernel_sdpav_1pass", [&](auto type_tag) {
-    dispatch_bool(do_causal_, [&](auto do_causal) {
+    dispatch_bool(do_causal, [&](auto do_causal) {
       dispatch_headdim(params.D, [&](auto headdim) {
         using DataType = cuda_type_t<MLX_GET_TYPE(type_tag)>;
 
@@ -504,6 +517,7 @@ void sdpa_vector_1pass_fallback(
             k.data<DataType>(),
             v.data<DataType>(),
             o.data<DataType>(),
+            sinks ? (*sinks).data<DataType>() : nullptr,
             params);
       });
     });
@@ -518,7 +532,8 @@ void sdpa_vector_2pass_fallback(
     const array& v,
     const float scale,
     array& o,
-    bool do_causal_ = false) {
+    bool do_causal,
+    const std::optional<array>& sinks) {
   cu::AttnParams params{
       /* int B = */ q.shape(0),
       /* int H = */ q.shape(1),
@@ -559,7 +574,7 @@ void sdpa_vector_2pass_fallback(
   encoder.add_temporary(maxs);
 
   dispatch_float_types(o.dtype(), "kernel_sdpav_2pass", [&](auto type_tag) {
-    dispatch_bool(do_causal_, [&](auto do_causal) {
+    dispatch_bool(do_causal, [&](auto do_causal) {
       dispatch_headdim(params.D, [&](auto headdim) {
         using DataType = cuda_type_t<MLX_GET_TYPE(type_tag)>;
 
@@ -570,6 +585,10 @@ void sdpa_vector_2pass_fallback(
           encoder.set_input_array(q);
           encoder.set_input_array(k);
           encoder.set_input_array(v);
+          if (sinks) {
+            encoder.set_input_array(*sinks);
+          }
+
           encoder.set_output_array(intermediate);
           encoder.set_output_array(sums);
           encoder.set_output_array(maxs);
@@ -585,6 +604,7 @@ void sdpa_vector_2pass_fallback(
               q.data<DataType>(),
               k.data<DataType>(),
               v.data<DataType>(),
+              sinks ? (*sinks).data<DataType>() : nullptr,
               intermediate.data<float>(),
               sums.data<float>(),
               maxs.data<float>(),
@@ -627,15 +647,16 @@ void sdpa_vector_fallback(
     const array& v,
     const float scale,
     array& o,
-    bool do_causal_ = false) {
+    bool do_causal,
+    const std::optional<array>& sinks) {
   int kL = k.shape(2);
 
   if (kL > 1024) {
     return sdpa_vector_2pass_fallback(
-        s, encoder, q, k, v, scale, o, do_causal_);
+        s, encoder, q, k, v, scale, o, do_causal, sinks);
   } else {
     return sdpa_vector_1pass_fallback(
-        s, encoder, q, k, v, scale, o, do_causal_);
+        s, encoder, q, k, v, scale, o, do_causal, sinks);
   }
 }
 
@@ -691,7 +712,7 @@ void ScaledDotProductAttention::eval_gpu(
 
   // Define some copy functions to ensure the layout of the inputs is as
   // expected.
-  copies.reserve(3);
+  copies.reserve(inputs.size());
   auto copy_unless = [&copies, &s](
                          auto predicate, const array& arr) -> const array& {
     if (!predicate(arr)) {
@@ -702,6 +723,16 @@ void ScaledDotProductAttention::eval_gpu(
       return arr;
     }
   };
+
+  // Checks that the headdim dimension has stride 1.
+  auto is_matrix_contiguous = [](const array& arr) {
+    return arr.strides(-1) == 1;
+  };
+
+  std::optional<array> sinks = std::nullopt;
+  if (has_sinks_) {
+    sinks = copy_unless(is_matrix_contiguous, inputs.back());
+  }
 
   // We are in vector mode ie single query
   if (q_pre.shape(2) < 4) {
@@ -740,10 +771,6 @@ void ScaledDotProductAttention::eval_gpu(
     const auto& k = copy_unless(kv_copy_unless, k_pre);
     const auto& v = copy_unless(kv_copy_unless, v_pre);
 
-    for (const auto& cp : copies) {
-      encoder.add_temporary(cp);
-    }
-
     // Donate the query if possible
     if (q.is_donatable() && q.flags().row_contiguous && q.size() == o.size()) {
       o.copy_shared_buffer(q);
@@ -752,22 +779,26 @@ void ScaledDotProductAttention::eval_gpu(
       int64_t str_oH = o.shape(3);
       int64_t str_oL = o.shape(1) * str_oH;
       int64_t str_oB = o.shape(2) * str_oL;
-      size_t data_size = o.shape(0) * str_oB;
 
       array::Flags flags{
           /* bool contiguous = */ 1,
           /* bool row_contiguous = */ o.shape(2) == 1,
-          /* bool col_contiguous = */ 0,
+          /* bool col_contiguous = */ o.size() == o.shape(3),
       };
 
       o.set_data(
           allocator::malloc(o.nbytes()),
-          data_size,
+          o.size(),
           {str_oB, str_oH, str_oL, str_oD},
           flags);
     }
 
-    return sdpa_vector_fallback(s, encoder, q, k, v, scale_, o, do_causal_);
+    for (const auto& cp : copies) {
+      encoder.add_temporary(cp);
+    }
+
+    return sdpa_vector_fallback(
+        s, encoder, q, k, v, scale_, o, do_causal_, sinks);
   }
 
   // Full attention mode should never reach here

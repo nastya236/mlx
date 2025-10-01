@@ -5,8 +5,9 @@
 
 namespace mlx::core::cu {
 
-Worker::Worker()
-    : signal_stream_(device(mlx::core::Device::gpu)),
+Worker::Worker(Device& d)
+    : signal_stream_(d),
+      signal_event_(d, cudaEventDisableTiming | cudaEventBlockingSync),
       worker_(&Worker::thread_fn, this) {}
 
 Worker::~Worker() {
