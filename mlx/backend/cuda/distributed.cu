@@ -75,8 +75,8 @@ void AllReduceCoalesced::eval_gpu(
   };
   for (size_t i = 0; i < inputs.size(); ++i) {
     auto [in, out] = set_input_output(inputs[i], outputs[i]);
-    output[i] = out;
-    input[i] = in;
+    outputs[i] = out;
+    inputs[i] = in;
   }
   // auto& encoder = cu::get_command_encoder(stream());
   // auto capture = encoder.capture_context();
