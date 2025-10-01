@@ -255,7 +255,7 @@ class NCCLGroup : public GroupImpl {
         comm_(nullptr),
         initMethod_(initMethod),
         copy_in_stream_{nullptr},
-        comm_out_stream_{nullptr} {
+        copy_out_stream_{nullptr} {
 
     if (initialized_)
       return;
