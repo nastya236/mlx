@@ -59,17 +59,31 @@ void AllReduceCoalesced::eval_gpu(
     const std::vector<array>& inputs,
     std::vector<array>& outputs) {
 
-  assert(inputs.size() == outputs.size());
+  auto set_input_output =
+      [s = stream()](const array& in, array& out) -> std::pair<array, array> {
+    if (!in.flags().row_contiguous) {
+      copy_gpu(in, out, CopyType::General, s);
+      return {out, out};
+    } else if (in.is_donatable()) {
+      out.copy_shared_buffer(in);
+      return {in, out};
+    } else {
+      out.set_data(allocator::malloc(out.nbytes()));
+      copy_gpu(in, out, CopyType::General, s);
+      return {out, out};
+    }
+  };
   for (size_t i = 0; i < inputs.size(); ++i) {
-    outputs[i].copy_shared_buffer(inputs[i]);
+    auto [in, out] = set_input_output(inputs[i], outputs[i]);
+    output[i] = out;
+    input[i] = in;
   }
-
   // auto& encoder = cu::get_command_encoder(stream());
   // auto capture = encoder.capture_context();
-  for (size_t i = 0; i < inputs.size(); ++i) {
-    encoder.set_input_array(inputs[i]);
-    encoder.set_output_array(outputs[i]);
-  }
+  // for (size_t i = 0; i < inputs.size(); ++i) {
+  //   encoder.set_input_array(inputs[i]);
+  //   encoder.set_output_array(outputs[i]);
+  // }
   auto& s = stream();
 
   switch (reduce_type_) {
