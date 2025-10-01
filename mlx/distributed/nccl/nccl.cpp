@@ -13,6 +13,7 @@
 #include <string>
 #include <type_traits>
 
+#include "mlx/backend/cuda/cuda.h"
 #include "mlx/backend/cuda/device.h"
 #include "mlx/distributed/distributed.h"
 #include "mlx/distributed/distributed_impl.h"
@@ -353,7 +354,6 @@ class NCCLGroup : public GroupImpl {
       Stream stream,
       ncclDataType_t dt,
       ncclRedOp_t op) {
-
     auto& encoder = cu::get_command_encoder(stream);
     CHECK_NCCL(ncclAllReduce(
         input.data<T>(),
@@ -372,7 +372,6 @@ class NCCLGroup : public GroupImpl {
       Stream stream,
       ncclDataType_t dt,
       ncclRedOp_t op) {
-
     auto& encoder = cu::get_command_encoder(stream);
 
     cu::CudaEvent event;
@@ -394,7 +393,7 @@ class NCCLGroup : public GroupImpl {
 
     for (const auto& in_array : inputs) {
       CHECK_CUDA(cudaMemcpyAsync(
-        workspace_buffer_ + current_offset,
+          workspace_buffer_ + current_offset,
           in_array.data<T>(),
           in_array.nbytes(),
           cudaMemcpyDeviceToDevice,
@@ -413,7 +412,7 @@ class NCCLGroup : public GroupImpl {
         comm_stream_));
 
     current_offset = 0;
-    
+
     for (auto& out_array : outputs) {
       CHECK_CUDA(cudaMemcpyAsync(
           out_array.data<T>(),
@@ -426,7 +425,6 @@ class NCCLGroup : public GroupImpl {
     }
     event.record(comm_stream_);
     event.wait(encoder.stream());
-    
   }
 
   int rank_, size_;
