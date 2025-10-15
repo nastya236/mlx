@@ -1041,6 +1041,12 @@ class TestOps(mlx_tests.MLXTestCase):
         expected = 1 / (1 + np.exp(-a, dtype=np.float32))
         self.assertTrue(np.allclose(result, expected))
 
+        # Low precision
+        a = mx.array(-8.0).astype(mx.float16)
+        self.assertNotEqual(mx.sigmoid(a).item(), 0.0)
+        a = mx.array(8.0).astype(mx.float16)
+        self.assertNotEqual(mx.sigmoid(a).item(), 1.0)
+
     def test_allclose(self):
         a = mx.array(1.0)
         b = mx.array(1.0)
@@ -3094,8 +3100,6 @@ class TestOps(mlx_tests.MLXTestCase):
         out = mx.depends(b, c)
         self.assertTrue(mx.array_equal(out, b))
 
-
-class TestBroadcast(mlx_tests.MLXTestCase):
     def test_broadcast_shapes(self):
         # Basic broadcasting
         self.assertEqual(mx.broadcast_shapes((1, 2, 3), (3,)), (1, 2, 3))
@@ -3133,6 +3137,12 @@ class TestBroadcast(mlx_tests.MLXTestCase):
 
         with self.assertRaises(ValueError):
             mx.broadcast_shapes()
+
+    def test_sort_nan(self):
+        x = mx.array([3.0, mx.nan, 2.0, 0.0])
+        expected = mx.array([0.0, 2.0, 3.0, mx.nan])
+        self.assertTrue(mx.array_equal(mx.sort(x), expected, equal_nan=True))
+        x = mx.array([3.0, mx.nan, 2.0, 0.0]) + 1j * mx.array([1.0] * 4)
 
 
 if __name__ == "__main__":

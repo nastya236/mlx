@@ -108,6 +108,9 @@ void matmul_general(
   } else if (out.dtype() == float64) {
     matmul_dispatch<double>(
         a, b, out, a_transposed, b_transposed, lda, ldb, alpha, beta, stream);
+  } else if (out.dtype() == complex64) {
+    matmul_dispatch<complex64_t>(
+        a, b, out, a_transposed, b_transposed, lda, ldb, alpha, beta, stream);
   } else {
     throw std::runtime_error("[Matmul::eval_cpu] Invalid type.");
   }
@@ -128,10 +131,6 @@ void Matmul::eval_cpu(const std::vector<array>& inputs, array& out) {
 }
 
 void AddMM::eval_cpu(const std::vector<array>& inputs, array& out) {
-  if (out.dtype() != float32) {
-    throw std::runtime_error(
-        "[AddMM::eval_cpu] Currently only supports float32.");
-  }
   if (out.size() == 0) {
     out.set_data(allocator::malloc(out.nbytes()));
     return;

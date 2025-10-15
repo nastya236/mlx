@@ -26,6 +26,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_INSTALL_MESSAGE NEVER)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ----------------------------- Configuration -----------------------------
 option(MLX_BUILD_TESTS "Build tests for mlx" ON)
@@ -173,7 +174,7 @@ if(MLX_BUILD_CPU)
     message(STATUS "Accelerate found ${ACCELERATE_LIBRARY}")
     set(MLX_BUILD_ACCELERATE ON)
   else()
-    message(STATUS "Accelerate or arm neon not found, using default backend.")
+    message(STATUS "Accelerate not found, using default backend.")
     set(MLX_BUILD_ACCELERATE OFF)
   endif()
 
