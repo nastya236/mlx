@@ -400,7 +400,7 @@ class NCCLGroup : public GroupImpl {
 
     size_t current_offset = 0;
 
-    cu::CudaEvent event(dev, cu::CudaEventFlags::DisableTiming) ;
+    cu::CudaEvent event(dev, cudaEventDisableTiming);
     event.record(encoder.stream());
     event.wait(comm_stream_);
 
