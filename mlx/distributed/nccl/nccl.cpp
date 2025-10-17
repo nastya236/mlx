@@ -265,9 +265,9 @@ class NCCLGroup : public GroupImpl {
       : rank_(worldRank),
         size_(worldSize),
         comm_(nullptr),
-        initMethod_(initMethod) 
-        comm_stream_(nullptr)
-        {
+        initMethod_(initMethod),
+        comm_stream_(nullptr) {
+
     if (initialized_)
       return;
     int ndev;
@@ -386,7 +386,7 @@ class NCCLGroup : public GroupImpl {
       ncclRedOp_t op) {
 
     auto& encoder = cu::get_command_encoder(stream);
-    auto& dev = cu::Device::device(stream.device);
+    auto& dev = cu::device(stream.device);
 
     size_t total_nbytes = 0;
     for (const auto& arr : inputs) {
