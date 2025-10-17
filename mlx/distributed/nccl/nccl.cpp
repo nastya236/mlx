@@ -265,7 +265,9 @@ class NCCLGroup : public GroupImpl {
       : rank_(worldRank),
         size_(worldSize),
         comm_(nullptr),
-        initMethod_(initMethod) {
+        initMethod_(initMethod) 
+        comm_stream_(nullptr)
+        {
     if (initialized_)
       return;
     int ndev;
@@ -273,6 +275,9 @@ class NCCLGroup : public GroupImpl {
     CHECK_CUDA(cudaSetDevice(rank_ % ndev));
     detail::bootstrap_unique_id(uniqueId_, rank_, size_, initMethod_);
     CHECK_NCCL(ncclCommInitRank(&comm_, size_, uniqueId_, rank_));
+    CHECK_CUDA(cudaStreamCreateWithFlags(&comm_stream_, 
+      cudaStreamNonBlocking));
+
     initialized_ = true;
     // Allocate NCCL workspace
     workspace_size_ = detail::get_workspace_size();
@@ -295,6 +300,7 @@ class NCCLGroup : public GroupImpl {
     if (comm_) {
       CHECK_NCCL(ncclCommDestroy(comm_));
     }
+    cudaStreamDestroy(comm_stream_);
     initialized_ = false;
   }
 
@@ -380,6 +386,7 @@ class NCCLGroup : public GroupImpl {
       ncclRedOp_t op) {
 
     auto& encoder = cu::get_command_encoder(stream);
+    auto& dev = cu::Device::device(stream.device);
 
     size_t total_nbytes = 0;
     for (const auto& arr : inputs) {
@@ -393,13 +400,17 @@ class NCCLGroup : public GroupImpl {
 
     size_t current_offset = 0;
 
+    cu::CudaEvent event(dev, cu::CudaEventFlags::DisableTiming) ;
+    event.record(encoder.stream());
+    event.wait(comm_stream_);
+
     for (const auto& in_array : inputs) {
       CHECK_CUDA(cudaMemcpyAsync(
         workspace_buffer_ + current_offset,
           in_array.data<T>(),
           in_array.nbytes(),
           cudaMemcpyDeviceToDevice,
-          encoder.stream()));
+          comm_stream_));
       current_offset += in_array.nbytes();
     }
 
@@ -411,7 +422,7 @@ class NCCLGroup : public GroupImpl {
         dt,
         ncclSum,
         comm_,
-        encoder.stream()));
+        comm_stream_));
 
     current_offset = 0;
     
@@ -421,9 +432,11 @@ class NCCLGroup : public GroupImpl {
           workspace_buffer_ + current_offset,
           out_array.nbytes(),
           cudaMemcpyDeviceToDevice,
-          encoder.stream()));
+          comm_stream_));
       current_offset += out_array.nbytes();
     }
+    event.record(comm_stream_);
+    event.wait(encoder.stream());
   }
 
   int rank_, size_;
@@ -434,6 +447,8 @@ class NCCLGroup : public GroupImpl {
   void* workspace_buffer_{nullptr};
   void* workspace_handle_{nullptr};
   size_t workspace_size_{0};
+  cudaStream_t comm_stream_;
+
 };
 
 bool is_available() {
