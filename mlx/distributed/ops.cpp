@@ -157,4 +157,9 @@ array recv_like(
   return recv(x.shape(), x.dtype(), src, group_, s);
 }
 
+array reduce_scatter(
+    const array& x,
+    std::optional<Group> group_ /* = std::nullopt */,
+    StreamOrDevice s /* = {} */) {
+  auto group = to_group(group_);
 } // namespace mlx::core::distributed
