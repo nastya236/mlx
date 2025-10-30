@@ -295,22 +295,6 @@ class NCCLGroup : public GroupImpl {
     throw std::runtime_error("[nccl] Group split not supported.");
   }
 
-  void reduce_scatter(const array& input, array& output, Stream stream)
-      override {
-    detail::dispatch_dtype(input, [&](auto type_tag, ncclDataType_t dt) {
-      using T = typename decltype(type_tag)::type;
-      auto& encoder = cu::get_command_encoder(stream);
-      CHECK_NCCL(ncclReduceScatter(
-          input.data<T>(),
-          output.data<T>(),
-          output.size(),
-          dt,
-          ncclAvg,
-          comm_,
-          encoder.stream()));
-    });
-  }
-
   void all_gather(const array& input, array& output, Stream stream) override {
     throw std::runtime_error(
         "[nccl] All gather not supported in NCCL backend.");
@@ -330,6 +314,22 @@ class NCCLGroup : public GroupImpl {
 
   void all_min(const array& input, array& output, Stream stream) override {
     throw std::runtime_error("[nccl] All min not supported in NCCL backend.");
+  }
+
+  void reduce_scatter(const array& input, array& output, Stream stream)
+      override {
+    detail::dispatch_dtype(input, [&](auto type_tag, ncclDataType_t dt) {
+      using T = typename decltype(type_tag)::type;
+      auto& encoder = cu::get_command_encoder(stream);
+      CHECK_NCCL(ncclReduceScatter(
+          input.data<T>(),
+          output.data<T>(),
+          output.size(),
+          dt,
+          ncclAvg,
+          comm_,
+          encoder.stream()));
+    });
   }
 
   template <typename T>

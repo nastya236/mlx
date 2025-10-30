@@ -123,17 +123,19 @@ class Recv : public DistPrimitive {
 
   DEFINE_NAME(Recv);
 
-  class ReduceScatter : public DistPrimitive {
-   public:
-    ReduceScatter(Stream stream, Group group) : DistPrimitive(stream, group) {}
+ private:
+  int src_;
+};
 
-    void eval_cpu(const std::vector<array>& inputs, std::vector<array>& outputs)
-        override;
-    void eval_gpu(const std::vector<array>& inputs, std::vector<array>& outputs)
-        override;
+class ReduceScatter : public DistPrimitive {
+ public:
+  ReduceScatter(Stream stream, Group group) : DistPrimitive(stream, group) {}
 
-   private:
-    int src_;
-  };
+  void eval_cpu(const std::vector<array>& inputs, std::vector<array>& outputs)
+      override;
+  void eval_gpu(const std::vector<array>& inputs, std::vector<array>& outputs)
+      override;
 
+  DEFINE_NAME(ReduceScatter);
+};
 } // namespace mlx::core::distributed

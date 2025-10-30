@@ -10,14 +10,6 @@
 
 namespace mlx::core::distributed {
 
-std::pair<array, bool> ensure_row_contiguous(const array& arr, Stream stream) {
-  if (arr.flags().row_contiguous) {
-    return {arr, false};
-  } else {
-    return {copy_gpu(arr, stream), true};
-  }
-};
-
 void AllReduce::eval_gpu(
     const std::vector<array>& inputs,
     std::vector<array>& outputs) {
@@ -65,34 +57,33 @@ void AllReduce::eval_gpu(
 
 void ReduceScatter::eval_gpu(
     const std::vector<array>& inputs,
-    std::vector<array>& outputs)
+    std::vector<array>& outputs) {
+  assert(inputs.size() == 1);
+  assert(outputs.size() == 1);
 
-    assert(inputs.size() == 1);
-assert(outputs.size() == 1);
+  auto set_input_output =
+      [s = stream()](const array& in, array& out) -> std::pair<array, array> {
+    if (!in.flags().row_contiguous) {
+      copy_gpu(in, out, CopyType::General, s);
+      return {out, out};
+    } else if (in.is_donatable()) {
+      out.copy_shared_buffer(in);
+      return {in, out};
+    } else {
+      out.set_data(allocator::malloc(out.nbytes()));
+      return {in, out};
+    }
+  };
 
-auto set_input_output =
-    [s = stream()](const array& in, array& out) -> std::pair<array, array> {
-  if (!in.flags().row_contiguous) {
-    copy_gpu(in, out, CopyType::General, s);
-    return {out, out};
-  } else if (in.is_donatable()) {
-    out.copy_shared_buffer(in);
-    return {in, out};
-  } else {
-    out.set_data(allocator::malloc(out.nbytes()));
-    return {in, out};
-  }
-};
+  auto [input, output] = set_input_output(inputs[0], outputs[0]);
 
-auto [input, output] = set_input_output(inputs[0], outputs[0]);
+  auto& encoder = cu::get_command_encoder(stream());
+  encoder.set_input_array(input);
+  encoder.set_output_array(output);
 
-auto& encoder = cu::get_command_encoder(stream());
-encoder.set_input_array(input);
-encoder.set_output_array(output);
+  auto capture = encoder.capture_context();
+  auto& s = stream();
 
-auto capture = encoder.capture_context();
-auto& s = stream();
-
-distributed::detail::reduce_scatter(group(), input, output, s);
-
+  distributed::detail::reduce_scatter(group(), input, output, s);
+}
 } // namespace mlx::core::distributed
