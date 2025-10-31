@@ -278,6 +278,44 @@ class TestNCCLDistributed(mlx_tests.MLXTestCase):
         y2 = smod(x)
         self.assertTrue(mx.allclose(y1, y2, atol=1e-6, rtol=1e-4))
 
+    def test_reduce_scatter(self):
+
+        mx.random.seed(0xF0F0F0F0)
+        world = mx.distributed.init()
+
+        dtypes = [
+            (mx.int8, 0),
+            (mx.uint8, 0),
+            (mx.int32, 0),
+            (mx.uint32, 0),
+            (mx.float32, 1e-6),
+            (mx.float16, 5e-3),
+            (mx.bfloat16, 1e-1),
+        ]
+        sizes = [
+            (8,),
+            (64,),
+            (1024,),
+            (1024, 1024),
+        ]
+        key = mx.random.key(world.rank())
+
+        for dt, rtol in dtypes:
+            for sh in sizes:
+                x = (
+                    mx.random.uniform(shape=sh, key=key) * 10
+                ).astype(dt) # shape=sh
+
+                # Reduce scatter sum
+
+                y = mx.distributed.reduce_scatter(x) # expect to get shape=sh/world.size() all_sum(x)[world.rank()]
+                z = mx.distributed.all_sum(x)[world.rank()] # shape=sh 
+
+                maxrelerror = (y - z).abs()
+                if rtol > 0:
+                    maxrelerror /= z.abs()
+                maxrelerror = maxrelerror.max()
+                self.assertLessEqual(maxrelerror, rtol)
 
 if __name__ == "__main__":
     mlx_tests.MLXTestRunner()
