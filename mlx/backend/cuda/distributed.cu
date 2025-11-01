@@ -9,7 +9,6 @@
 #include <cassert>
 
 namespace mlx::core::distributed {
-
 void AllReduce::eval_gpu(
     const std::vector<array>& inputs,
     std::vector<array>& outputs) {
