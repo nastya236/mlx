@@ -1,7 +1,7 @@
 // Copyright © 2025 Apple Inc.
 
-#include "mlx/backend/cuda/gemms/cublas_gemm.h"
 #include "mlx/backend/cuda/device.h"
+#include "mlx/backend/cuda/gemms/cublas_gemm.h"
 #include "mlx/dtype_utils.h"
 #include "mlx/utils.h"
 
@@ -21,7 +21,7 @@ struct CublasPreference {
     uint64_t workspace_size =
         device.compute_capability_major() >= 9 ? 32 * MiB : 4 * MiB;
 
-    // creates a matrix multiply heuristic search preferences descriptor 
+    // creates a matrix multiply heuristic search preferences descriptor
     // by allocating the memory needed to hold its opaque structure:
 
     CHECK_CUBLAS_ERROR(cublasLtMatmulPreferenceCreate(&pref_));
@@ -65,22 +65,18 @@ CublasGemm::CublasQuantizedGemm(
       M_(a_rows),
       N_(b_cols) {
   heuristic_.state = CUBLAS_STATUS_NOT_INITIALIZED;
-  
+
   // here CUBLAS_COMPUTE_32F is for operation descriptor
-  // then operation precision is defined with matrix layout 
+  // then operation precision is defined with matrix layout
   // [http://sanqian.synology.me:8418/zhangyiss/mlx/commit/a6d780154f2fe79e893045659d17fbace243802a?style=split&whitespace=show-all&show-outdated=]
+  cublasComputeType_t gemm_compute_type = CUBLAS_COMPUTE_32F;
+  CHECK_CUBLAS_ERROR(
+      cublasLtMatmulDescCreate(&operationDesc, gemm_compute_type, CUDA_R_32F));
 
-  CHECK_CUBLAS_ERROR(cublasLtMatmulDescCreate(
-      &matmul_desc_, CUBLAS_COMPUTE_32F, CUDA_R_32F));
+  // setting opA and opB for C = A @ B
+  // note the swap due to column-major layout in cuBLAS
+  // C^T = (A @ B)^T = B^T @ A^T
 
-  // int32_t pointer_mode = CUBLASLT_POINTER_MODE_HOST;
-  // CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
-  //     matmul_desc_,
-  //     CUBLASLT_MATMUL_DESC_POINTER_MODE,
-  //     &pointer_mode,
-  //     sizeof(int32_t)));
-
-  // the layout is column major, then:
   cublasOperation_t a_op = b_transposed ? CUBLAS_OP_T : CUBLAS_OP_N;
   CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
       matmul_desc_,
@@ -94,48 +90,43 @@ CublasGemm::CublasQuantizedGemm(
       &b_op,
       sizeof(cublasOperation_t)));
 
-  // auto type = dtype_to_cublas_type(dtype);
-  // a_desc_ = create_matrix_layout(
-  //     type, b_cols, b_rows, b_transposed, ldb, batch_count, b_batch_stride);
-  // b_desc_ = create_matrix_layout(
-  //     type, a_cols, a_rows, a_transposed, lda, batch_count, a_batch_stride);
-  // out_desc_ = create_matrix_layout(
-  //     type, b_cols, a_rows, false, b_cols, batch_count, a_rows * b_cols);
-}
+  // alpha, beta pointer mode set to device ? (TODO)
+  cublasLtPointerMode_t pointer_mode = CUBLASLT_POINTER_MODE_DEVICE;
+  CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
+      matmul_desc_,
+      CUBLASLT_MATMUL_DESC_POINTER_MODE,
+      &pointer_mode,
+      sizeof(pointer_mode)));
 
-CublasGemm::CublasGemm(
-    cu::Device& device,
-    Dtype dtype,
-    bool a_transposed,
-    uint64_t a_rows,
-    uint64_t a_cols,
-    int64_t lda,
-    bool b_transposed,
-    uint64_t b_rows,
-    uint64_t b_cols,
-    int64_t ldb,
-    int64_t ldc,
-    int32_t batch_count,
-    int64_t a_batch_stride,
-    int64_t b_batch_stride,
-    int64_t c_batch_stride)
-    : CublasGemm(
-          device,
-          dtype,
-          a_transposed,
-          a_rows,
-          a_cols,
-          lda,
-          b_transposed,
-          b_rows,
-          b_cols,
-          ldb,
-          batch_count,
-          a_batch_stride,
-          b_batch_stride) {
-  auto type = dtype_to_cublas_type(dtype);
-  c_desc_ = create_matrix_layout(
-      type, b_cols, a_rows, false, ldc, batch_count, c_batch_stride);
+  // scales:
+  //  TODO this is just for NVFP4 for now, need to generalize later
+  a_scale_mode_ = CUBLASLT_MATMUL_MATRIX_SCALE_VEC16_UE4M3;
+  b_scale_mode_ = CUBLASLT_MATMUL_MATRIX_SCALE_VEC16_UE4M3;
+
+  CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
+      matmul_desc_,
+      CUBLASLT_MATMUL_DESC_A_MATRIX_SCALE_TYPE,
+      &a_scale_mode_,
+      sizeof(a_scale_mode_)));
+  CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
+      matmul_desc_,
+      CUBLASLT_MATMUL_DESC_B_MATRIX_SCALE_TYPE,
+      &b_scale_mode_,
+      sizeof(b_scale_mode_)));
+
+  // here i need to set CUBLASLT_MATMUL_DESC_A_SCALE_POINTERs
+
+  // creating layouts for A, B, and output matrices
+  CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutCreate(
+      &a_desc_, CUDA_R_4F_E2M1, b_cols, b_rows, ldb));
+  CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutCreate(
+      &b_desc_, CUDA_R_4F_E2M1, a_cols, a_rows, lda));
+  CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutCreate(
+      &out_desc_,
+      CUDA_R_16BF, // output in bf16
+      b_cols, // m
+      a_rows, // n
+      b_cols));
 }
 
 CublasGemm::~CublasGemm() {
@@ -146,40 +137,40 @@ CublasGemm::~CublasGemm() {
   CHECK_CUBLAS_ERROR(cublasLtMatmulDescDestroy(matmul_desc_));
 }
 
-void CublasGemm::set_out(
-    Dtype dtype,
-    bool transposed,
-    uint64_t rows,
-    uint64_t cols,
-    int64_t ld,
-    int32_t batch_count,
-    int64_t batch_stride) {
-  CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutDestroy(out_desc_));
-  out_desc_ = create_matrix_layout(
-      dtype_to_cublas_type(dtype),
-      cols,
-      rows,
-      transposed,
-      ld,
-      batch_count,
-      batch_stride);
-}
+// void CublasGemm::set_out(
+//     Dtype dtype,
+//     bool transposed,
+//     uint64_t rows,
+//     uint64_t cols,
+//     int64_t ld,
+//     int32_t batch_count,
+//     int64_t batch_stride) {
+//   CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutDestroy(out_desc_));
+//   out_desc_ = create_matrix_layout(
+//       dtype_to_cublas_type(dtype),
+//       cols,
+//       rows,
+//       transposed,
+//       ld,
+//       batch_count,
+//       batch_stride);
+// }
 
-void CublasGemm::set_bias(cu::CommandEncoder& encoder, const array& bias) {
-  encoder.set_input_array(bias);
-  cublasLtEpilogue_t epilogue = CUBLASLT_EPILOGUE_BIAS;
-  CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
-      matmul_desc_,
-      CUBLASLT_MATMUL_DESC_EPILOGUE,
-      &epilogue,
-      sizeof(epilogue)));
-  auto* bias_ptr = bias.data<void>();
-  CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
-      matmul_desc_,
-      CUBLASLT_MATMUL_DESC_BIAS_POINTER,
-      &bias_ptr,
-      sizeof(bias_ptr)));
-}
+// void CublasGemm::set_bias(cu::CommandEncoder& encoder, const array& bias) {
+//   encoder.set_input_array(bias);
+//   cublasLtEpilogue_t epilogue = CUBLASLT_EPILOGUE_BIAS;
+//   CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
+//       matmul_desc_,
+//       CUBLASLT_MATMUL_DESC_EPILOGUE,
+//       &epilogue,
+//       sizeof(epilogue)));
+//   auto* bias_ptr = bias.data<void>();
+//   CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
+//       matmul_desc_,
+//       CUBLASLT_MATMUL_DESC_BIAS_POINTER,
+//       &bias_ptr,
+//       sizeof(bias_ptr)));
+// }
 
 void CublasGemm::run(
     cu::CommandEncoder& encoder,

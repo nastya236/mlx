@@ -61,29 +61,29 @@ class CublasQuantizedGemm {
       float alpha,
       float beta);
 
-//  private:
-//   void run_batched(
-//       cu::CommandEncoder& encoder,
-//       array& out,
-//       const array& a,
-//       const array& b,
-//       const Shape& batch_shape,
-//       const Strides& a_batch_strides,
-//       const Strides& b_batch_strides,
-//       float alpha);
+  //  private:
+  //   void run_batched(
+  //       cu::CommandEncoder& encoder,
+  //       array& out,
+  //       const array& a,
+  //       const array& b,
+  //       const Shape& batch_shape,
+  //       const Strides& a_batch_strides,
+  //       const Strides& b_batch_strides,
+  //       float alpha);
 
-//   void run_batched(
-//       cu::CommandEncoder& encoder,
-//       array& out,
-//       const array& a,
-//       const array& b,
-//       const array& c,
-//       const Shape& batch_shape,
-//       const Strides& a_batch_strides,
-//       const Strides& b_batch_strides,
-//       const Strides& c_batch_strides,
-//       float alpha,
-//       float beta);
+  //   void run_batched(
+  //       cu::CommandEncoder& encoder,
+  //       array& out,
+  //       const array& a,
+  //       const array& b,
+  //       const array& c,
+  //       const Shape& batch_shape,
+  //       const Strides& a_batch_strides,
+  //       const Strides& b_batch_strides,
+  //       const Strides& c_batch_strides,
+  //       float alpha,
+  //       float beta);
 
   void execute(
       cu::CommandEncoder& encoder,
@@ -104,6 +104,11 @@ class CublasQuantizedGemm {
   cublasLtMatrixLayout_t b_desc_{nullptr};
   cublasLtMatrixLayout_t c_desc_{nullptr};
   cublasLtMatrixLayout_t out_desc_{nullptr};
+  cublasLtMatmulMatrixScale_t a_scale_mode_{nullptr};
+  cublasLtMatmulMatrixScale_t b_scale_mode_{nullptr};
+  cublasLtMatmulMatrixScale_t c_scale_mode_{nullptr};
+  cublasLtMatmulMatrixScale_t d_scale_mode_{nullptr};
+  cublasLtMatmulMatrixScale_t out_scale_mode_{nullptr};
   cublasLtMatmulHeuristicResult_t heuristic_;
 };
 
