@@ -256,7 +256,8 @@ class NCCLGroup : public GroupImpl {
       : rank_(worldRank),
         size_(worldSize),
         comm_(nullptr),
-        initMethod_(initMethod) {
+        initMethod_(initMethod),
+        comm_stream_(nullptr) {
     if (initialized_)
       return;
     int ndev;
@@ -264,11 +265,13 @@ class NCCLGroup : public GroupImpl {
     CHECK_CUDA(cudaSetDevice(rank_ % ndev));
     detail::bootstrap_unique_id(uniqueId_, rank_, size_, initMethod_);
     CHECK_NCCL(ncclCommInitRank(&comm_, size_, uniqueId_, rank_));
+    CHECK_CUDA(cudaStreamCreateWithFlags(&comm_stream_, cudaStreamNonBlocking));
     initialized_ = true;
   }
 
   ~NCCLGroup() {
     ncclCommDestroy(comm_);
+    cudaStreamDestroy(comm_stream_);
     initialized_ = false;
   }
 
@@ -299,13 +302,20 @@ class NCCLGroup : public GroupImpl {
     detail::dispatch_dtype(input, [&](auto type_tag, ncclDataType_t dt) {
       using T = typename decltype(type_tag)::type;
       auto& encoder = cu::get_command_encoder(stream);
+
+      cu::CudaEvent event;
+      event.record(encoder.stream());
+      event.wait(comm_stream_);
+
       CHECK_NCCL(ncclAllGather(
           gpu_ptr<T>(input),
           gpu_ptr<T>(output),
           input.size(),
           dt,
           comm_,
-          encoder.stream()));
+          comm_stream_));
+      event.record(comm_stream_);
+      event.wait(encoder.stream());
     });
   }
 
@@ -381,6 +391,7 @@ class NCCLGroup : public GroupImpl {
   ncclUniqueId uniqueId_;
   ncclComm_t comm_;
   bool initialized_ = false;
+  cudaStream_t comm_stream_;
 };
 
 bool is_available() {
