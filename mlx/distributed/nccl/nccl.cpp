@@ -302,8 +302,9 @@ class NCCLGroup : public GroupImpl {
     detail::dispatch_dtype(input, [&](auto type_tag, ncclDataType_t dt) {
       using T = typename decltype(type_tag)::type;
       auto& encoder = cu::get_command_encoder(stream);
+      auto& dev = cu::device(stream.device);
 
-      cu::CudaEvent event;
+      cu::CudaEvent event(dev, cudaEventDisableTiming);
       event.record(encoder.stream());
       event.wait(comm_stream_);
 
