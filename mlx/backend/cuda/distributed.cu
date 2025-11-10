@@ -76,10 +76,12 @@ void AllGather::eval_gpu(
   auto input = ensure_contiguous(inputs[0]);
   outputs[0].set_data(cu::malloc_async(outputs[0].nbytes(), encoder.stream()));
 
-  encoder.set_input_array(input);
-  encoder.set_output_array(outputs[0]);
+  // TODO: fix all_reduce when capturing by a cuda graph
+  // encoder.set_input_array(input);
+  // encoder.set_output_array(outputs[0]);
 
-  auto capture = encoder.capture_context();
+  // auto capture = encoder.capture_context();
+
   distributed::detail::all_gather(group(), input, outputs[0], s);
 }
 
