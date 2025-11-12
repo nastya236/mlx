@@ -20,10 +20,6 @@ struct CublasPreference {
     uint64_t MiB = 1024 * 1024;
     uint64_t workspace_size =
         device.compute_capability_major() >= 9 ? 32 * MiB : 4 * MiB;
-
-    // creates a matrix multiply heuristic search preferences descriptor
-    // by allocating the memory needed to hold its opaque structure:
-
     CHECK_CUBLAS_ERROR(cublasLtMatmulPreferenceCreate(&pref_));
     CHECK_CUBLAS_ERROR(cublasLtMatmulPreferenceSetAttribute(
         pref_,
@@ -46,7 +42,7 @@ cublasLtMatmulPreference_t cublas_preference(cu::Device& device) {
 
 } // namespace
 
-CublasGemm::CublasQuantizedGemm(
+CublasQuantizedGemm::CublasQuantizedGemm(
     cu::Device& device,
     Dtype dtype,
     bool a_transposed,
@@ -66,16 +62,9 @@ CublasGemm::CublasQuantizedGemm(
       N_(b_cols) {
   heuristic_.state = CUBLAS_STATUS_NOT_INITIALIZED;
 
-  // here CUBLAS_COMPUTE_32F is for operation descriptor
-  // then operation precision is defined with matrix layout
-  // [http://sanqian.synology.me:8418/zhangyiss/mlx/commit/a6d780154f2fe79e893045659d17fbace243802a?style=split&whitespace=show-all&show-outdated=]
   cublasComputeType_t gemm_compute_type = CUBLAS_COMPUTE_32F;
   CHECK_CUBLAS_ERROR(
       cublasLtMatmulDescCreate(&operationDesc, gemm_compute_type, CUDA_R_32F));
-
-  // setting opA and opB for C = A @ B
-  // note the swap due to column-major layout in cuBLAS
-  // C^T = (A @ B)^T = B^T @ A^T
 
   cublasOperation_t a_op = b_transposed ? CUBLAS_OP_T : CUBLAS_OP_N;
   CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
@@ -105,12 +94,12 @@ CublasGemm::CublasQuantizedGemm(
 
   CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
       matmul_desc_,
-      CUBLASLT_MATMUL_DESC_A_MATRIX_SCALE_TYPE,
+      CUBLASLT_MATMUL_DESC_A_SCALE_POINTER,
       &a_scale_mode_,
       sizeof(a_scale_mode_)));
   CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
       matmul_desc_,
-      CUBLASLT_MATMUL_DESC_B_MATRIX_SCALE_TYPE,
+      CUBLASLT_MATMUL_DESC_A_SCALE_POINTER,
       &b_scale_mode_,
       sizeof(b_scale_mode_)));
 
@@ -129,7 +118,7 @@ CublasGemm::CublasQuantizedGemm(
       b_cols));
 }
 
-CublasGemm::~CublasGemm() {
+CublasQuantizedGemm::~CublasQuantizedGemm() {
   CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutDestroy(a_desc_));
   CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutDestroy(b_desc_));
   CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutDestroy(c_desc_));
@@ -137,126 +126,54 @@ CublasGemm::~CublasGemm() {
   CHECK_CUBLAS_ERROR(cublasLtMatmulDescDestroy(matmul_desc_));
 }
 
-// void CublasGemm::set_out(
-//     Dtype dtype,
-//     bool transposed,
-//     uint64_t rows,
-//     uint64_t cols,
-//     int64_t ld,
-//     int32_t batch_count,
-//     int64_t batch_stride) {
-//   CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutDestroy(out_desc_));
-//   out_desc_ = create_matrix_layout(
-//       dtype_to_cublas_type(dtype),
-//       cols,
-//       rows,
-//       transposed,
-//       ld,
-//       batch_count,
-//       batch_stride);
-// }
-
-// void CublasGemm::set_bias(cu::CommandEncoder& encoder, const array& bias) {
-//   encoder.set_input_array(bias);
-//   cublasLtEpilogue_t epilogue = CUBLASLT_EPILOGUE_BIAS;
-//   CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
-//       matmul_desc_,
-//       CUBLASLT_MATMUL_DESC_EPILOGUE,
-//       &epilogue,
-//       sizeof(epilogue)));
-//   auto* bias_ptr = bias.data<void>();
-//   CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
-//       matmul_desc_,
-//       CUBLASLT_MATMUL_DESC_BIAS_POINTER,
-//       &bias_ptr,
-//       sizeof(bias_ptr)));
-// }
-
-void CublasGemm::run(
+void CublasQuantizedGemm::run(
     cu::CommandEncoder& encoder,
     array& out,
     const array& a,
     const array& b,
-    const Shape& batch_shape,
-    const Strides& a_batch_strides,
-    const Strides& b_batch_strides,
+    const array& a_scale,
+    const array& b_scale,
+    // const Shape& batch_shape,
+    // const Strides& a_batch_strides,
+    // const Strides& b_batch_strides,
     float alpha) {
-  int batch_count = out.size() / (M_ * N_);
-  if (batch_count / batch_shape.back() > 1) {
-    run_batched(
-        encoder,
-        out,
-        a,
-        b,
-        batch_shape,
-        a_batch_strides,
-        b_batch_strides,
-        alpha);
-    return;
-  }
-
+  // int batch_count = out.size() / (M_ * N_);
+  // if (batch_count / batch_shape.back() > 1) {
+  //   run_batched(
+  //       encoder,
+  //       out,
+  //       a,
+  //       b,
+  //       batch_shape,
+  //       a_batch_strides,
+  //       b_batch_strides,
+  //       alpha);
+  //   return;
+  // }
   encoder.set_input_array(a);
   encoder.set_input_array(b);
+  encoder.set_input_array(a_scale);
+  encoder.set_input_array(b_scale);
   encoder.set_output_array(out);
 
   execute(
       encoder,
-      out.data<void>(),
-      a.data<void>(),
-      b.data<void>(),
+      gpu_ptr<void>(out),
+      gpu_ptr<void>(a),
+      gpu_ptr<void>(b),
+      gpu_ptr<void>(a_scale),
+      gpu_ptr<void>(b_scale),
       nullptr,
       alpha);
 }
 
-void CublasGemm::run(
-    cu::CommandEncoder& encoder,
-    array& out,
-    const array& a,
-    const array& b,
-    const array& c,
-    const Shape& batch_shape,
-    const Strides& a_batch_strides,
-    const Strides& b_batch_strides,
-    const Strides& c_batch_strides,
-    float alpha,
-    float beta) {
-  int batch_count = out.size() / (M_ * N_);
-  if (batch_count / batch_shape.back() > 1) {
-    run_batched(
-        encoder,
-        out,
-        a,
-        b,
-        c,
-        batch_shape,
-        a_batch_strides,
-        b_batch_strides,
-        c_batch_strides,
-        alpha,
-        beta);
-    return;
-  }
-
-  encoder.set_input_array(a);
-  encoder.set_input_array(b);
-  encoder.set_input_array(c);
-  encoder.set_output_array(out);
-
-  execute(
-      encoder,
-      out.data<void>(),
-      a.data<void>(),
-      b.data<void>(),
-      c.data<void>(),
-      alpha,
-      beta);
-}
-
-void CublasGemm::execute(
+void CublasQuantizedGemm::execute(
     cu::CommandEncoder& encoder,
     void* out,
     const void* a,
     const void* b,
+    const void* a_scale,
+    const void* b_scale,
     const void* c,
     float alpha /* = 1 */,
     float beta /* = 0 */) {
@@ -280,15 +197,25 @@ void CublasGemm::execute(
     }
   }
 
+  CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
+      matmul_desc_,
+      CUBLASLT_MATMUL_DESC_A_SCALE_POINTER,
+      a_scale,
+      sizeof(a_scale)));
+  CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
+      matmul_desc_,
+      CUBLASLT_MATMUL_DESC_B_SCALE_POINTER,
+      b_scale,
+      sizeof(b_scale)));
   const void* alpha_ptr = &alpha;
   const void* beta_ptr = &beta;
-  complex64_t alpha_c, beta_c;
-  if (scale_type_ == CUDA_C_32F) {
-    alpha_c = complex64_t{alpha, 0.0f};
-    beta_c = complex64_t{beta, 0.0f};
-    alpha_ptr = &alpha_c;
-    beta_ptr = &beta_c;
-  }
+  // complex64_t alpha_c, beta_c;
+  // if (scale_type_ == CUDA_C_32F) {
+  //   alpha_c = complex64_t{alpha, 0.0f};
+  //   beta_c = complex64_t{beta, 0.0f};
+  //   alpha_ptr = &alpha_c;
+  //   beta_ptr = &beta_c;
+  // }
 
   void* workspace_ptr = nullptr;
   if (heuristic_.workspaceSize > 0) {

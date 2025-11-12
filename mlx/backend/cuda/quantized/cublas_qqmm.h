@@ -20,23 +20,23 @@ class CublasQuantizedGemm {
       bool b_transposed,
       uint64_t b_rows,
       uint64_t b_cols,
-      int64_t ldb,
-      int32_t batch_count,
-      int64_t a_batch_stride,
-      int64_t b_batch_stride);
+      int64_t ldb);
+  //   int32_t batch_count,
+  //   int64_t a_batch_stride,
+  //   int64_t b_batch_stride);
 
   ~CublasQuantizedGemm();
 
-  void set_out(
-      Dtype dtype,
-      bool transposed,
-      uint64_t rows,
-      uint64_t cols,
-      int64_t ld,
-      int32_t batch_count,
-      int64_t batch_stride);
+  //   void set_out(
+  //       Dtype dtype,
+  //       bool transposed,
+  //       uint64_t rows,
+  //       uint64_t cols,
+  //       int64_t ld,
+  //       int32_t batch_count,
+  //       int64_t batch_stride);
 
-  void set_bias(cu::CommandEncoder& encoder, const array& bias);
+  //   void set_bias(cu::CommandEncoder& encoder, const array& bias);
 
   void run(
       cu::CommandEncoder& encoder,
@@ -48,18 +48,18 @@ class CublasQuantizedGemm {
       const Strides& b_batch_strides,
       float alpha = 1.0f);
 
-  void run(
-      cu::CommandEncoder& encoder,
-      array& out,
-      const array& a,
-      const array& b,
-      const array& c,
-      const Shape& batch_shape,
-      const Strides& a_batch_strides,
-      const Strides& b_batch_strides,
-      const Strides& c_batch_strides,
-      float alpha,
-      float beta);
+  //   void run(
+  //       cu::CommandEncoder& encoder,
+  //       array& out,
+  //       const array& a,
+  //       const array& b,
+  //       const array& c,
+  //       const Shape& batch_shape,
+  //       const Strides& a_batch_strides,
+  //       const Strides& b_batch_strides,
+  //       const Strides& c_batch_strides,
+  //       float alpha,
+  //       float beta);
 
   //  private:
   //   void run_batched(
@@ -90,6 +90,8 @@ class CublasQuantizedGemm {
       void* out,
       const void* a,
       const void* b,
+      const void* a_scale,
+      const void* b_scale,
       const void* c,
       float alpha = 1,
       float beta = 0);
@@ -104,11 +106,10 @@ class CublasQuantizedGemm {
   cublasLtMatrixLayout_t b_desc_{nullptr};
   cublasLtMatrixLayout_t c_desc_{nullptr};
   cublasLtMatrixLayout_t out_desc_{nullptr};
-  cublasLtMatmulMatrixScale_t a_scale_mode_{nullptr};
-  cublasLtMatmulMatrixScale_t b_scale_mode_{nullptr};
-  cublasLtMatmulMatrixScale_t c_scale_mode_{nullptr};
-  cublasLtMatmulMatrixScale_t d_scale_mode_{nullptr};
-  cublasLtMatmulMatrixScale_t out_scale_mode_{nullptr};
+  cublasLtMatmulMatrixScale_t a_scale_mode_;
+  cublasLtMatmulMatrixScale_t b_scale_mode_;
+  cublasLtMatmulMatrixScale_t c_scale_mode_;
+  cublasLtMatmulMatrixScale_t out_scale_mode_;
   cublasLtMatmulHeuristicResult_t heuristic_;
 };
 
