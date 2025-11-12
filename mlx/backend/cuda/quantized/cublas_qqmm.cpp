@@ -1,10 +1,10 @@
 // Copyright © 2025 Apple Inc.
 
 #include "mlx/backend/cuda/device.h"
-#include "mlx/backend/cuda/gemms/cublas_gemm.h"
+#include "mlx/backend/cuda/quantized/cublas_qqmm.h"
 #include "mlx/dtype_utils.h"
 #include "mlx/utils.h"
-
+#include <cuda_fp8.h>
 #include <fmt/format.h>
 
 namespace mlx::core {
@@ -44,7 +44,6 @@ cublasLtMatmulPreference_t cublas_preference(cu::Device& device) {
 
 CublasQuantizedGemm::CublasQuantizedGemm(
     cu::Device& device,
-    Dtype dtype,
     bool a_transposed,
     uint64_t a_rows,
     uint64_t a_cols,
@@ -52,10 +51,10 @@ CublasQuantizedGemm::CublasQuantizedGemm(
     bool b_transposed,
     uint64_t b_rows,
     uint64_t b_cols,
-    int64_t ldb,
-    int32_t batch_count,
-    int64_t a_batch_stride,
-    int64_t b_batch_stride)
+    int64_t ldb)
+    // int32_t batch_count,
+    // int64_t a_batch_stride,
+    // int64_t b_batch_stride)
     : handle_(device.lt_handle()),
       pref_(cublas_preference(device)),
       M_(a_rows),
@@ -64,7 +63,7 @@ CublasQuantizedGemm::CublasQuantizedGemm(
 
   cublasComputeType_t gemm_compute_type = CUBLAS_COMPUTE_32F;
   CHECK_CUBLAS_ERROR(
-      cublasLtMatmulDescCreate(&operationDesc, gemm_compute_type, CUDA_R_32F));
+      cublasLtMatmulDescCreate(&matmul_desc_, gemm_compute_type, CUDA_R_32F));
 
   cublasOperation_t a_op = b_transposed ? CUBLAS_OP_T : CUBLAS_OP_N;
   CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
@@ -94,12 +93,12 @@ CublasQuantizedGemm::CublasQuantizedGemm(
 
   CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
       matmul_desc_,
-      CUBLASLT_MATMUL_DESC_A_SCALE_POINTER,
+      CUBLASLT_MATMUL_DESC_A_SCALE_MODE,
       &a_scale_mode_,
       sizeof(a_scale_mode_)));
   CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
       matmul_desc_,
-      CUBLASLT_MATMUL_DESC_A_SCALE_POINTER,
+      CUBLASLT_MATMUL_DESC_A_SCALE_MODE,
       &b_scale_mode_,
       sizeof(b_scale_mode_)));
 

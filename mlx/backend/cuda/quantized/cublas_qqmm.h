@@ -12,7 +12,6 @@ class CublasQuantizedGemm {
  public:
   CublasQuantizedGemm(
       cu::Device& device,
-      Dtype dtype,
       bool a_transposed,
       uint64_t a_rows,
       uint64_t a_cols,
@@ -43,9 +42,11 @@ class CublasQuantizedGemm {
       array& out,
       const array& a,
       const array& b,
-      const Shape& batch_shape,
-      const Strides& a_batch_strides,
-      const Strides& b_batch_strides,
+        const array& a_scale,
+        const array& b_scale,
+    //   const Shape& batch_shape,
+    //   const Strides& a_batch_strides,
+    //   const Strides& b_batch_strides,
       float alpha = 1.0f);
 
   //   void run(
