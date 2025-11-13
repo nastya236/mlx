@@ -7,44 +7,6 @@
 #include <cuda_fp8.h>
 #include <fmt/format.h>
 
-#define CHECK_LT(expr) do {                                \
-  cublasStatus_t _s = (expr);                              \
-  if (_s != CUBLAS_STATUS_SUCCESS) {                       \
-    fprintf(stderr, "[cuBLASLt] %s failed: %d at %s:%d\n", \
-            #expr, int(_s), __FILE__, __LINE__);           \
-    throw std::runtime_error("cuBLASLt error");            \
-  }                                                        \
-} while(0)
-
-namespace {
-
-inline void print_desc(const char* tag, cublasLtMatrixLayout_t d) {
-  int64_t rows, cols, ld; cublasLtOrder_t order; size_t sz; int dtype;
-  CHECK_LT(cublasLtMatrixLayoutGetAttribute(d, CUBLASLT_MATRIX_LAYOUT_ROWS,  &rows, sizeof(rows), &sz));
-  CHECK_LT(cublasLtMatrixLayoutGetAttribute(d, CUBLASLT_MATRIX_LAYOUT_COLS,  &cols, sizeof(cols), &sz));
-  CHECK_LT(cublasLtMatrixLayoutGetAttribute(d, CUBLASLT_MATRIX_LAYOUT_LD,    &ld,   sizeof(ld),   &sz));
-  CHECK_LT(cublasLtMatrixLayoutGetAttribute(d, CUBLASLT_MATRIX_LAYOUT_ORDER, &order,sizeof(order),&sz));
-  CHECK_LT(cublasLtMatrixLayoutGetAttribute(d, CUBLASLT_MATRIX_LAYOUT_TYPE,  &dtype,sizeof(dtype),&sz));
-  fprintf(stderr, "%s: rows=%ld cols=%ld ld=%ld order=%d type=%d\n",
-          tag, (long)rows, (long)cols, (long)ld, (int)order, dtype);
-}
-
-inline void print_op(cublasLtMatmulDesc_t op) {
-  cublasOperation_t ta, tb; cublasLtPointerMode_t pm; size_t sz;
-  CHECK_LT(cublasLtMatmulDescGetAttribute(op, CUBLASLT_MATMUL_DESC_TRANSA, &ta, sizeof(ta), &sz));
-  CHECK_LT(cublasLtMatmulDescGetAttribute(op, CUBLASLT_MATMUL_DESC_TRANSB, &tb, sizeof(tb), &sz));
-  CHECK_LT(cublasLtMatmulDescGetAttribute(op, CUBLASLT_MATMUL_DESC_POINTER_MODE, &pm, sizeof(pm), &sz));
-  fprintf(stderr, "op: transA=%d transB=%d pointer_mode=%d\n", ta, tb, pm);
-  int a_mode, b_mode;
-  if (cublasLtMatmulDescGetAttribute(op, CUBLASLT_MATMUL_DESC_A_SCALE_MODE, &a_mode, sizeof(a_mode), &sz) == CUBLAS_STATUS_SUCCESS)
-    fprintf(stderr, "A_SCALE_MODE=%d\n", a_mode);
-  if (cublasLtMatmulDescGetAttribute(op, CUBLASLT_MATMUL_DESC_B_SCALE_MODE, &b_mode, sizeof(b_mode), &sz) == CUBLAS_STATUS_SUCCESS)
-    fprintf(stderr, "B_SCALE_MODE=%d\n", b_mode);
-}
-
-} // anonymous namespace
-
-
 using fp8e4m3 = __nv_fp8_e4m3;
 
 namespace mlx::core {
@@ -155,11 +117,6 @@ CublasQuantizedGemm::CublasQuantizedGemm(
       b_cols, // m
       a_rows, // n
       b_cols));
-
-  print_desc("A'", a_desc_);
-  print_desc("B'", b_desc_);
-  print_desc("D (C^T)", out_desc_);
-  print_op(matmul_desc_);
 }
 
 CublasQuantizedGemm::~CublasQuantizedGemm() {
@@ -229,12 +186,12 @@ void CublasQuantizedGemm::execute(
   CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
       matmul_desc_,
       CUBLASLT_MATMUL_DESC_A_SCALE_POINTER,
-      &a_scale,
+      &b_scale,
       sizeof(a_scale)));
   CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
       matmul_desc_,
       CUBLASLT_MATMUL_DESC_B_SCALE_POINTER,
-      &b_scale,
+      &a_scale,
       sizeof(b_scale)));
 
   if (heuristic_.state != CUBLAS_STATUS_SUCCESS) {
