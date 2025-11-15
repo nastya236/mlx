@@ -1,16 +1,33 @@
 // Copyright © 2025 Apple Inc.
 
 #include "mlx/backend/cuda/quantized/cublas_qqmm.h"
-#include <cuda_fp8.h>
 #include <fmt/format.h>
 #include "mlx/backend/cuda/device.h"
-#include "mlx/backend/cuda/gemms/cublas_utils.h"
+#include "mlx/backend/cuda/cublas_utils.h"
 #include "mlx/dtype_utils.h"
 #include "mlx/utils.h"
 
-using fp8e4m3 = __nv_fp8_e4m3;
-
 namespace mlx::core {
+
+namespace {
+    cudaDataType_t dtype_to_cublas_type(Dtype dtype) {
+  switch (dtype) {
+    case float16:
+      return CUDA_R_16F;
+    case bfloat16:
+      return CUDA_R_16BF;
+    case float32:
+      return CUDA_R_32F;
+    case float64:
+      return CUDA_R_64F;
+    case complex64:
+      return CUDA_C_32F;
+    default:
+      throw std::runtime_error(fmt::format(
+          "Unsupported dtype in CublasGemm: {}.", dtype_to_string(dtype)));
+  }
+}
+}
 
 CublasQuantizedGemm::CublasQuantizedGemm(
     cu::Device& device,

@@ -1,6 +1,6 @@
 // Copyright © 2025 Apple Inc.
 
-#include "mlx/backend/cuda/gemms/cublas_utils.h"
+#include "mlx/backend/cuda/cublas_utils.h"
 #include "mlx/backend/cuda/cuda.h"
 #include "mlx/utils.h"
 
@@ -110,6 +110,34 @@ void execute_matmul(
       workspace_ptr,
       heuristic.workspaceSize,
       encoder.stream()));
+}
+
+cublasLtMatrixLayout_t create_matrix_layout(
+    cudaDataType_t type,
+    uint64_t rows,
+    uint64_t cols,
+    bool transposed,
+    int64_t ld,
+    int32_t batch_count,
+    int64_t batch_stride) {
+  cublasLtMatrixLayout_t desc;
+  if (transposed) {
+    std::swap(rows, cols);
+  }
+  CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutCreate(&desc, type, rows, cols, ld));
+  if (batch_count > 1) {
+    CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutSetAttribute(
+        desc,
+        CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT,
+        &batch_count,
+        sizeof(int32_t)));
+    CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutSetAttribute(
+        desc,
+        CUBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET,
+        &batch_stride,
+        sizeof(int64_t)));
+  }
+  return desc;
 }
 
 } // namespace cublas_utils

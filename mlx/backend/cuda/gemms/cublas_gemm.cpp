@@ -2,7 +2,7 @@
 
 #include "mlx/backend/cuda/gemms/cublas_gemm.h"
 #include "mlx/backend/cuda/device.h"
-#include "mlx/backend/cuda/gemms/cublas_utils.h"
+#include "mlx/backend/cuda/cublas_utils.h"
 #include "mlx/dtype_utils.h"
 #include "mlx/utils.h"
 
