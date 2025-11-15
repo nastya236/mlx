@@ -60,7 +60,7 @@ CublasQuantizedGemm::CublasQuantizedGemm(
     : handle_(device.lt_handle()),
       pref_(cublas_preference(device)),
       M_(a_rows),
-      N_(b_cols) {
+      N_(b_transposed ? b_rows : b_cols) {
   heuristic_.state = CUBLAS_STATUS_NOT_INITIALIZED;
 
   cublasComputeType_t gemm_compute_type = CUBLAS_COMPUTE_32F;
@@ -114,9 +114,9 @@ CublasQuantizedGemm::CublasQuantizedGemm(
   CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutCreate(
       &out_desc_,
       CUDA_R_16BF, // output in bf16
-      b_cols, // m
-      a_rows, // n
-      b_cols));
+      b_transposed ? b_rows : b_cols, // m
+      a_rows, // asume that never transposed (supported only TN layout)
+      b_transposed ? b_rows : b_cols));
 }
 
 CublasQuantizedGemm::~CublasQuantizedGemm() {
@@ -180,19 +180,19 @@ void CublasQuantizedGemm::execute(
     float beta /* = 0 */) {
 
   // set scale pointers
-  const fp8e4m3* a_scale_ptr = reinterpret_cast<const fp8e4m3*>(a_scale);
-  const fp8e4m3* b_scale_ptr = reinterpret_cast<const fp8e4m3*>(b_scale);
+  // const fp8e4m3* a_scale_ptr = reinterpret_cast<const fp8e4m3*>(a_scale);
+  // const fp8e4m3* b_scale_ptr = reinterpret_cast<const fp8e4m3*>(b_scale);
 
   CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
       matmul_desc_,
       CUBLASLT_MATMUL_DESC_A_SCALE_POINTER,
       &b_scale,
-      sizeof(a_scale)));
+      sizeof(b_scale)));
   CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
       matmul_desc_,
       CUBLASLT_MATMUL_DESC_B_SCALE_POINTER,
       &a_scale,
-      sizeof(b_scale)));
+      sizeof(a_scale)));
 
   if (heuristic_.state != CUBLAS_STATUS_SUCCESS) {
     int ret = 0;
