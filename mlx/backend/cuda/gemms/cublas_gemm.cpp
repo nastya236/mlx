@@ -2,6 +2,7 @@
 
 #include "mlx/backend/cuda/gemms/cublas_gemm.h"
 #include "mlx/backend/cuda/device.h"
+#include "mlx/backend/cuda/gemms/cublas_utils.h"
 #include "mlx/dtype_utils.h"
 #include "mlx/utils.h"
 
@@ -10,35 +11,6 @@
 namespace mlx::core {
 
 namespace {
-
-struct CublasPreference {
-  CublasPreference(cu::Device& device) {
-    // The recommended cublas workspace size is 4 MiB for pre-Hopper and 32 MiB
-    // for Hopper+:
-    // https://docs.nvidia.com/cuda/cublas/#cublassetworkspace
-    uint64_t MiB = 1024 * 1024;
-    uint64_t workspace_size =
-        device.compute_capability_major() >= 9 ? 32 * MiB : 4 * MiB;
-
-    CHECK_CUBLAS_ERROR(cublasLtMatmulPreferenceCreate(&pref_));
-    CHECK_CUBLAS_ERROR(cublasLtMatmulPreferenceSetAttribute(
-        pref_,
-        CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES,
-        &workspace_size,
-        sizeof(uint64_t)));
-  }
-
-  ~CublasPreference() {
-    CHECK_CUBLAS_ERROR(cublasLtMatmulPreferenceDestroy(pref_));
-  }
-
-  cublasLtMatmulPreference_t pref_{nullptr};
-};
-
-cublasLtMatmulPreference_t cublas_preference(cu::Device& device) {
-  static CublasPreference pref(device);
-  return pref.pref_;
-}
 
 cublasComputeType_t dtype_to_compute_type(Dtype dtype) {
   switch (dtype) {
@@ -123,7 +95,7 @@ CublasGemm::CublasGemm(
     int64_t a_batch_stride,
     int64_t b_batch_stride)
     : handle_(device.lt_handle()),
-      pref_(cublas_preference(device)),
+      pref_(cublas_utils::get_preference(device)),
       M_(a_rows),
       N_(b_cols) {
   heuristic_.state = CUBLAS_STATUS_NOT_INITIALIZED;
@@ -337,24 +309,6 @@ void CublasGemm::execute(
     const void* c,
     float alpha /* = 1 */,
     float beta /* = 0 */) {
-  if (heuristic_.state != CUBLAS_STATUS_SUCCESS) {
-    int ret = 0;
-    CHECK_CUBLAS_ERROR(cublasLtMatmulAlgoGetHeuristic(
-        handle_,
-        matmul_desc_,
-        a_desc_,
-        b_desc_,
-        c ? c_desc_ : out_desc_,
-        out_desc_,
-        pref_,
-        1,
-        &heuristic_,
-        &ret));
-    if (ret == 0) {
-      throw std::runtime_error("Can not find algorithm for matmul.");
-    }
-  }
-
   const void* alpha_ptr = &alpha;
   const void* beta_ptr = &beta;
   complex64_t alpha_c, beta_c;
@@ -365,36 +319,22 @@ void CublasGemm::execute(
     beta_ptr = &beta_c;
   }
 
-  void* workspace_ptr = nullptr;
-  if (heuristic_.workspaceSize > 0) {
-    // Ensure workspace is 256-byte aligned
-    int nbytes = cuda::ceil_div(heuristic_.workspaceSize, 256) * 256;
-    array workspace(
-        cu::malloc_async(nbytes, encoder.stream()),
-        {static_cast<int>(heuristic_.workspaceSize)},
-        int8);
-    encoder.add_temporary(workspace);
-    workspace_ptr = gpu_ptr<void>(workspace);
-  }
-
-  auto capture = encoder.capture_context();
-  CHECK_CUBLAS_ERROR(cublasLtMatmul(
+  cublas_utils::execute_matmul(
+      encoder,
       handle_,
       matmul_desc_,
-      alpha_ptr,
-      b, // a and b are swapped
       a_desc_,
-      a,
       b_desc_,
-      beta_ptr,
-      c ? c : out,
-      c ? c_desc_ : out_desc_,
-      out,
+      c_desc_,
       out_desc_,
-      &heuristic_.algo,
-      workspace_ptr,
-      heuristic_.workspaceSize,
-      encoder.stream()));
+      heuristic_,
+      pref_,
+      out,
+      a,
+      b,
+      c,
+      alpha_ptr,
+      beta_ptr);
 }
 
 } // namespace mlx::core
