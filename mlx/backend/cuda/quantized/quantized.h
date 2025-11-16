@@ -42,13 +42,4 @@ void fp_dequantize(
     cu::CommandEncoder& enc,
     const Stream& s);
 
-void repack_scales(
-    const array& scales,
-    array& scales_tiled,
-    int M,
-    int K,
-    int group_size,
-    cu::CommandEncoder& enc,
-    const Stream& s);
-
 } // namespace mlx::core

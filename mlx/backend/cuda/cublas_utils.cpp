@@ -140,45 +140,17 @@ void execute_matmul(
       encoder.stream()));
 }
 
-cublasLtMatrixLayout_t create_matrix_layout(
-    cudaDataType_t type,
-    uint64_t rows,
-    uint64_t cols,
-    bool transposed,
-    int64_t ld,
-    int32_t batch_count,
-    int64_t batch_stride) {
-  cublasLtMatrixLayout_t desc;
-  if (transposed) {
-    std::swap(rows, cols);
-  }
-  CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutCreate(&desc, type, rows, cols, ld));
-  if (batch_count > 1) {
-    CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutSetAttribute(
-        desc,
-        CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT,
-        &batch_count,
-        sizeof(int32_t)));
-    CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutSetAttribute(
-        desc,
-        CUBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET,
-        &batch_stride,
-        sizeof(int64_t)));
-  }
-  return desc;
-}
-
-void set_bias(cu::CommandEncoder& encoder, const array& bias) {
+void set_bias(
+    cu::CommandEncoder& encoder,
+    cublasLtMatmulDesc_t matmul_desc,
+    const array& bias) {
   encoder.set_input_array(bias);
   cublasLtEpilogue_t epilogue = CUBLASLT_EPILOGUE_BIAS;
   CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
-      matmul_desc_,
-      CUBLASLT_MATMUL_DESC_EPILOGUE,
-      &epilogue,
-      sizeof(epilogue)));
+      matmul_desc, CUBLASLT_MATMUL_DESC_EPILOGUE, &epilogue, sizeof(epilogue)));
   auto* bias_ptr = gpu_ptr<void>(bias);
   CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
-      matmul_desc_,
+      matmul_desc,
       CUBLASLT_MATMUL_DESC_BIAS_POINTER,
       &bias_ptr,
       sizeof(bias_ptr)));

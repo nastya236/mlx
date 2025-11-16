@@ -78,6 +78,11 @@ class CublasGemm {
       float alpha,
       float beta);
 
+  // Get the matmul descriptor for setting attributes like bias
+  cublasLtMatmulDesc_t matmul_desc() const {
+    return matmul_desc_;
+  }
+
  private:
   void run_batched(
       cu::CommandEncoder& encoder,

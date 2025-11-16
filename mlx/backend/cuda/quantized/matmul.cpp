@@ -5,7 +5,7 @@
 #include "mlx/backend/cuda/device.h"
 #include "mlx/backend/cuda/quantized/cublas_qqmm.h"
 #include "mlx/backend/cuda/quantized/matmul.h"
-#include "mlx/backend/cuda/quantized/quantized.h"
+#include "mlx/backend/cuda/quantized/qqmm_utils.h"
 #include "mlx/backend/gpu/copy.h"
 #include "mlx/primitives.h"
 
@@ -15,36 +15,6 @@
 namespace mlx::core {
 
 namespace {
-
-void gemm_and_bias(
-    cu::CommandEncoder& encoder,
-    int M,
-    int N,
-    int K,
-    bool a_transposed,
-    int64_t lda,
-    bool b_transposed,
-    int64_t ldb,
-    array& out,
-    const array& a,
-    const array& b,
-    const std::optional<array>& bias = std::nullopt,
-    float alpha = 1.0f) {
-  // Invoke cublasLt
-  CublasGemm gemm(
-      encoder.device(),
-      a.dtype(),
-      a_transposed,
-      M,
-      K,
-      lda,
-      b_transposed,
-      K,
-      N,
-      ldb);
-
-  gemm.run(encoder, out, a, b, batch_shape, alpha);
-}
 
 void qqmm_impl(
     cu::CommandEncoder& encoder,

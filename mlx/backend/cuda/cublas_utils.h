@@ -44,7 +44,11 @@ void execute_matmul(
     const void* alpha_ptr,
     const void* beta_ptr);
 
-void set_bias(cu::CommandEncoder& encoder, const array& bias);
+// Set bias for matmul epilogue
+void set_bias(
+    cu::CommandEncoder& encoder,
+    cublasLtMatmulDesc_t matmul_desc,
+    const array& bias);
 
 } // namespace cublas_utils
 

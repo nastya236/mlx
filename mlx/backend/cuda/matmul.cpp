@@ -97,9 +97,9 @@ void gemm_and_bias(
   if (bias) {
     if (a.dtype() == complex64) {
       throw std::runtime_error(
-          "[gemm_and_bias] complex64 bias epilogue isn’t supported in cublasLtMatmul.");
+          "[gemm_and_bias] complex64 bias epilogue isn't supported in cublasLtMatmul.");
     }
-    cublas_utils::set_bias(encoder, *bias);
+    cublas_utils::set_bias(encoder, gemm.matmul_desc(), *bias);
   }
   gemm.run(
       encoder, out, a, b, batch_shape, a_batch_strides, b_batch_strides, alpha);
