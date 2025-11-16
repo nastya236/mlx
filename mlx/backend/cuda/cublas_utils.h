@@ -16,6 +16,16 @@ cublasLtMatmulPreference_t get_preference(cu::Device& device);
 // The workspace array is added to the encoder's temporaries
 void* allocate_workspace(cu::CommandEncoder& encoder, size_t workspace_size);
 
+// Create matrix layout
+cublasLtMatrixLayout_t create_matrix_layout(
+    cudaDataType_t type,
+    uint64_t rows,
+    uint64_t cols,
+    bool transposed,
+    int64_t ld,
+    int32_t batch_count,
+    int64_t batch_stride);
+
 // Execute matmul with pre-configured descriptors
 void execute_matmul(
     cu::CommandEncoder& encoder,
@@ -34,5 +44,8 @@ void execute_matmul(
     const void* alpha_ptr,
     const void* beta_ptr);
 
+void set_bias(cu::CommandEncoder& encoder, const array& bias);
+
 } // namespace cublas_utils
+
 } // namespace mlx::core

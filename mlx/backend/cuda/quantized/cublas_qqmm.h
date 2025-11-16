@@ -8,9 +8,9 @@
 
 namespace mlx::core {
 
-class CublasQuantizedGemm {
+class CublasQQMM {
  public:
-  CublasQuantizedGemm(
+  CublasQQMM(
       cu::Device& device,
       bool a_transposed,
       uint64_t a_rows,
@@ -24,29 +24,18 @@ class CublasQuantizedGemm {
   //   int64_t a_batch_stride,
   //   int64_t b_batch_stride);
 
-  ~CublasQuantizedGemm();
-
-  //   void set_out(
-  //       Dtype dtype,
-  //       bool transposed,
-  //       uint64_t rows,
-  //       uint64_t cols,
-  //       int64_t ld,
-  //       int32_t batch_count,
-  //       int64_t batch_stride);
-
-  //   void set_bias(cu::CommandEncoder& encoder, const array& bias);
+  ~CublasQQMM();
 
   void run(
       cu::CommandEncoder& encoder,
       array& out,
       const array& a,
       const array& b,
-        const array& a_scale,
-        const array& b_scale,
-    //   const Shape& batch_shape,
-    //   const Strides& a_batch_strides,
-    //   const Strides& b_batch_strides,
+      const array& a_scale,
+      const array& b_scale,
+      //   const Shape& batch_shape,
+      //   const Strides& a_batch_strides,
+      //   const Strides& b_batch_strides,
       float alpha = 1.0f);
 
   //   void run(

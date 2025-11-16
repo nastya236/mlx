@@ -1,8 +1,8 @@
 // Copyright © 2025 Apple Inc.
 
 #include "mlx/backend/cuda/gemms/cublas_gemm.h"
-#include "mlx/backend/cuda/device.h"
 #include "mlx/backend/cuda/cublas_utils.h"
+#include "mlx/backend/cuda/device.h"
 #include "mlx/dtype_utils.h"
 #include "mlx/utils.h"
 
@@ -48,34 +48,6 @@ cudaDataType_t dtype_to_cublas_type(Dtype dtype) {
       throw std::runtime_error(fmt::format(
           "Unsupported dtype in CublasGemm: {}.", dtype_to_string(dtype)));
   }
-}
-
-cublasLtMatrixLayout_t create_matrix_layout(
-    cudaDataType_t type,
-    uint64_t rows,
-    uint64_t cols,
-    bool transposed,
-    int64_t ld,
-    int32_t batch_count,
-    int64_t batch_stride) {
-  cublasLtMatrixLayout_t desc;
-  if (transposed) {
-    std::swap(rows, cols);
-  }
-  CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutCreate(&desc, type, rows, cols, ld));
-  if (batch_count > 1) {
-    CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutSetAttribute(
-        desc,
-        CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT,
-        &batch_count,
-        sizeof(int32_t)));
-    CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutSetAttribute(
-        desc,
-        CUBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET,
-        &batch_stride,
-        sizeof(int64_t)));
-  }
-  return desc;
 }
 
 } // namespace
@@ -135,11 +107,11 @@ CublasGemm::CublasGemm(
       sizeof(cublasOperation_t)));
 
   auto type = dtype_to_cublas_type(dtype);
-  a_desc_ = create_matrix_layout(
+  a_desc_ = cublas_utils::create_matrix_layout(
       type, b_cols, b_rows, b_transposed, ldb, batch_count, b_batch_stride);
-  b_desc_ = create_matrix_layout(
+  b_desc_ = cublas_utils::create_matrix_layout(
       type, a_cols, a_rows, a_transposed, lda, batch_count, a_batch_stride);
-  out_desc_ = create_matrix_layout(
+  out_desc_ = cublas_utils::create_matrix_layout(
       type, b_cols, a_rows, false, b_cols, batch_count, a_rows * b_cols);
 }
 
@@ -174,7 +146,7 @@ CublasGemm::CublasGemm(
           a_batch_stride,
           b_batch_stride) {
   auto type = dtype_to_cublas_type(dtype);
-  c_desc_ = create_matrix_layout(
+  c_desc_ = cublas_utils::create_matrix_layout(
       type, b_cols, a_rows, false, ldc, batch_count, c_batch_stride);
 }
 
@@ -195,7 +167,7 @@ void CublasGemm::set_out(
     int32_t batch_count,
     int64_t batch_stride) {
   CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutDestroy(out_desc_));
-  out_desc_ = create_matrix_layout(
+  out_desc_ = cublas_utils::create_matrix_layout(
       dtype_to_cublas_type(dtype),
       cols,
       rows,
@@ -203,22 +175,6 @@ void CublasGemm::set_out(
       ld,
       batch_count,
       batch_stride);
-}
-
-void CublasGemm::set_bias(cu::CommandEncoder& encoder, const array& bias) {
-  encoder.set_input_array(bias);
-  cublasLtEpilogue_t epilogue = CUBLASLT_EPILOGUE_BIAS;
-  CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
-      matmul_desc_,
-      CUBLASLT_MATMUL_DESC_EPILOGUE,
-      &epilogue,
-      sizeof(epilogue)));
-  auto* bias_ptr = gpu_ptr<void>(bias);
-  CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
-      matmul_desc_,
-      CUBLASLT_MATMUL_DESC_BIAS_POINTER,
-      &bias_ptr,
-      sizeof(bias_ptr)));
 }
 
 void CublasGemm::run(

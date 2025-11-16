@@ -2,34 +2,14 @@
 
 #include "mlx/backend/cuda/quantized/cublas_qqmm.h"
 #include <fmt/format.h>
-#include "mlx/backend/cuda/device.h"
 #include "mlx/backend/cuda/cublas_utils.h"
+#include "mlx/backend/cuda/device.h"
 #include "mlx/dtype_utils.h"
 #include "mlx/utils.h"
 
 namespace mlx::core {
 
-namespace {
-    cudaDataType_t dtype_to_cublas_type(Dtype dtype) {
-  switch (dtype) {
-    case float16:
-      return CUDA_R_16F;
-    case bfloat16:
-      return CUDA_R_16BF;
-    case float32:
-      return CUDA_R_32F;
-    case float64:
-      return CUDA_R_64F;
-    case complex64:
-      return CUDA_C_32F;
-    default:
-      throw std::runtime_error(fmt::format(
-          "Unsupported dtype in CublasGemm: {}.", dtype_to_string(dtype)));
-  }
-}
-}
-
-CublasQuantizedGemm::CublasQuantizedGemm(
+CublasQQMM::CublasQQMM(
     cu::Device& device,
     bool a_transposed,
     uint64_t a_rows,
@@ -46,6 +26,8 @@ CublasQuantizedGemm::CublasQuantizedGemm(
       pref_(cublas_utils::get_preference(device)),
       M_(a_rows),
       N_(b_transposed ? b_rows : b_cols) {
+  // here b_transposed should be always true (TN layout)
+  // for nvfp4
   heuristic_.state = CUBLAS_STATUS_NOT_INITIALIZED;
 
   cublasComputeType_t gemm_compute_type = CUBLAS_COMPUTE_32F;
@@ -104,7 +86,7 @@ CublasQuantizedGemm::CublasQuantizedGemm(
       b_transposed ? b_rows : b_cols));
 }
 
-CublasQuantizedGemm::~CublasQuantizedGemm() {
+CublasQQMM::~CublasQQMM() {
   CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutDestroy(a_desc_));
   CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutDestroy(b_desc_));
   CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutDestroy(c_desc_));
@@ -112,7 +94,7 @@ CublasQuantizedGemm::~CublasQuantizedGemm() {
   CHECK_CUBLAS_ERROR(cublasLtMatmulDescDestroy(matmul_desc_));
 }
 
-void CublasQuantizedGemm::run(
+void CublasQQMM::run(
     cu::CommandEncoder& encoder,
     array& out,
     const array& a,
@@ -136,6 +118,7 @@ void CublasQuantizedGemm::run(
   //       alpha);
   //   return;
   // }
+
   encoder.set_input_array(a);
   encoder.set_input_array(b);
   encoder.set_input_array(a_scale);
@@ -153,7 +136,7 @@ void CublasQuantizedGemm::run(
       alpha);
 }
 
-void CublasQuantizedGemm::execute(
+void CublasQQMM::execute(
     cu::CommandEncoder& encoder,
     void* out,
     const void* a,
@@ -164,6 +147,7 @@ void CublasQuantizedGemm::execute(
     float alpha /* = 1 */,
     float beta /* = 0 */) {
   // Set scale pointers (quantized-specific)
+
   CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
       matmul_desc_,
       CUBLASLT_MATMUL_DESC_A_SCALE_POINTER,
