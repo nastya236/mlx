@@ -4232,28 +4232,31 @@ array qqmm(
     bool quantize_output /* = false */,
     StreamOrDevice s /* = {} */) {
   // currently only simetric quantization is supported for qqmm
-  auto qmode = string_to_quantization_mode(mode, tag);
+  auto qmode = string_to_quantization_mode(mode, "qqmm");
   // For narrow precision MMAs on B200 only TN layout is supported:
   // https://docs.nvidia.com/cutlass/media/docs/cpp/blackwell_functionality.html
+  // TODO: handle it better
   if ((qmode == QuantizationMode::Nvfp4 || qmode == QuantizationMode::Mxfp4) &&
       !transpose) {
     std::ostringstream msg;
-    msg << "[" << tag << "] transpose must be set to true with " << mode
+    msg << "[qqmm] transpose must be set to true with " << mode
         << " quantization but "
         << "transpose == false was provided.";
     throw std::invalid_argument(msg.str());
   }
   if (qmode == QuantizationMode::Affine) {
     std::ostringstream msg;
-    msg << "[" << tag << "] Affine quantization is not supported for qqmm.";
+    msg << "[qqmm] Affine quantization is not supported for qqmm.";
     throw std::invalid_argument(msg.str());
   }
   auto [group_size, bits] =
       quantization_params_from_mode(qmode, group_size_, bits_);
   // Check and extract the quantized matrix shape against x
-  auto [{x_inner_dims, x_outer_dims}, {w_inner_dims, w_outer_dims}] =
+  auto [x_dims, w_dims] =
       extract_qqmm_dims(
           "qqmm", x, w, scales_x, scales_w, transpose, group_size, bits);
+  auto [x_inner_dims, x_outer_dims] = x_dims;
+  auto [w_inner_dims, w_outer_dims] = w_dims;
 
   std::vector<array> inputs = {x, w, scales_x, scales_w};
 

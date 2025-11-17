@@ -1403,6 +1403,17 @@ std::vector<array> quantize(
     const std::string& mode = "affine",
     StreamOrDevice s = {});
 
+array qqmm(
+    const array& x,
+    const array& w,
+    const array& x_scales,
+    const array& w_scales,
+    bool transpose = true,
+    std::optional<int> group_size = std::nullopt,
+    std::optional<int> bits = std::nullopt,
+    const std::string& mode = "nvfp4",
+    StreamOrDevice s = {});
+
 /** Dequantize a matrix produced by quantize() */
 array dequantize(
     const array& w,
