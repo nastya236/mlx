@@ -16,8 +16,8 @@ namespace cg = cooperative_groups;
 // documentation:
 // https://github.com/NVIDIA/cutlass/blob/main/media/docs/cpp/blackwell_functionality.md#scale-factor-layouts
 // Conceptually, it should be like this:
-// q_w = mx.ones(shape=(M, N))
-// s.shape = (M, N // 16) -- packed in row contigous order
+// q_w = mx.zeros(shape=(M, N)) <-- zeros just for an example
+// s.shape = (M, N // 16) -- packed in row contigous order, group_size = 16
 // cbg_cnt = N // 16 // 4
 // rb_cnt = M // 128
 // tmp = x.reshape(rb_cnt, 4, 32, cbg_cnt, 4)
@@ -133,19 +133,18 @@ __global__ void repack_scales_kernel(
 void repack_scales(
     const array& scales,
     array& scales_tiled,
-    int M,
-    int K,
-    int group_size,
+    int num_rows,
+    int num_cols,
     cu::CommandEncoder& enc,
     const Stream& s) {
   enc.set_input_array(scales);
   enc.set_output_array(scales_tiled);
 
-  // Note scales_tiled is padded to full tiles so if M or K/group_size
+  // Note: scales_tiled is padded to full tiles so if num_rows or num_cols
   // are not multiples of tile sizes, the extra space is filled with zeros
 
-  size_t input_rows = M;
-  size_t input_cols = K / group_size;
+  size_t input_rows = num_rows;
+  size_t input_cols = num_cols;
 
   size_t output_rows = scales_tiled.shape(0);
   size_t output_cols = scales_tiled.shape(1);

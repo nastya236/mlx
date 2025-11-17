@@ -55,9 +55,12 @@ std::pair<array, array> repack_for_tensor_cores(
     int group_size,
     cu::CommandEncoder& encoder,
     const Stream& s) {
+  // Compute actual scale dimensions
+  int num_scale_cols = K / group_size;
+
   // Compute padded dimensions for full tiles (128 rows × 4 cols)
-  auto [padded_M, padded_cols_a] = get_padded_scale_dims(M, K, group_size);
-  auto [padded_N, padded_cols_b] = get_padded_scale_dims(N, K, group_size);
+  auto [padded_M, padded_cols_a] = get_padded_scale_dims(M, num_scale_cols);
+  auto [padded_N, padded_cols_b] = get_padded_scale_dims(N, num_scale_cols);
 
   // When tensor dimensions are not multiples of the tile size above,
   // it is necessary to still allocate full tile for storage and fill
@@ -76,8 +79,8 @@ std::pair<array, array> repack_for_tensor_cores(
 
   // Repack scales from linear to tiled layout
   // Kernel will zero-fill out-of-bounds regions
-  repack_scales(scale_a, scale_a_tiled, M, K, group_size, encoder, s);
-  repack_scales(scale_b, scale_b_tiled, N, K, group_size, encoder, s);
+  repack_scales(scale_a, scale_a_tiled, M, num_scale_cols, encoder, s);
+  repack_scales(scale_b, scale_b_tiled, N, num_scale_cols, encoder, s);
   encoder.add_temporary(scale_a_tiled);
   encoder.add_temporary(scale_b_tiled);
 
@@ -150,7 +153,7 @@ void qqmm_impl(
 
 void QQMatmul::eval_gpu(const std::vector<array>& inputs, array& out) {
   nvtx3::scoped_range r("QQMatmul::eval_gpu");
-
+  // WIP need to add primitive
   // TODO: for now minimalistic implementation without batching support
   auto& s = stream();
   auto& encoder = cu::get_command_encoder(s);
