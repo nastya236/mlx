@@ -3468,6 +3468,22 @@ std::vector<Shape> QuantizedMatmul::output_shapes(
   return {std::move(out_shape)};
 }
 
+bool DualQuantizedMatmul::is_equivalent(const Primitive& other) const {
+  const QuantizedMatmul& qm_other = static_cast<const QuantizedMatmul&>(other);
+  return group_size_ == qm_other.group_size_ && bits_ == qm_other.bits_ &&
+      mode_ == qm_other.mode_ && transpose_ == qm_other.transpose_;
+}
+
+std::vector<Shape> DualQuantizedMatmul::output_shapes(
+    const std::vector<array>& inputs) {
+  auto out_shape = inputs[0].shape(); // M
+  auto& w = inputs[1];
+  int w_outer_dims = (transpose_) ? w.shape(-2) : w.shape(-1);
+  w_outer_dims *= quantize_aoutput_ ? 1 : (32 / bits_);
+  out_shape.back() = w_outer_dims;
+  return {std::move(out_shape)};
+}
+
 std::pair<std::vector<array>, std::vector<int>> GatherQMM::vmap(
     const std::vector<array>& inputs,
     const std::vector<int>& axes) {
