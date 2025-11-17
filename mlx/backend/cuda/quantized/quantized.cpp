@@ -62,10 +62,14 @@ std::pair<array, array> repack_for_tensor_cores(
   auto [padded_M, padded_cols_a] = get_padded_scale_dims(M, num_scale_cols);
   auto [padded_N, padded_cols_b] = get_padded_scale_dims(N, num_scale_cols);
 
-  // When tensor dimensions are not multiples of the tile size above,
-  // it is necessary to still allocate full tile for storage and fill
-  // out of bounds values with zeroes.
+  // cuBLAS requirements for scale factor layout:
+  // 1. Dimensions must be padded to full tiles (128 rows × 4 cols)
+  // 2. Out-of-bounds values must be filled with zeros
+  // 3. Starting addresses must be 16-byte aligned
   // https://docs.nvidia.com/cuda/cublas/index.html#d-block-scaling-factors-layout
+  //
+  // Note: cu::malloc_async provides 256-byte alignment, satisfying requirement
+  // #3
 
   array scale_a_tiled(
       {static_cast<int>(padded_M), static_cast<int>(padded_cols_a)}, uint8);
@@ -77,8 +81,7 @@ std::pair<array, array> repack_for_tensor_cores(
   scale_b_tiled.set_data(
       cu::malloc_async(scale_b_tiled.nbytes(), encoder.stream()));
 
-  // Repack scales from linear to tiled layout
-  // Kernel will zero-fill out-of-bounds regions
+  // Repack scales from linear to tiled layout (handles requirements #1 and #2)
   repack_scales(scale_a, scale_a_tiled, M, num_scale_cols, encoder, s);
   repack_scales(scale_b, scale_b_tiled, N, num_scale_cols, encoder, s);
   encoder.add_temporary(scale_a_tiled);

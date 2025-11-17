@@ -4161,6 +4161,54 @@ array quantized_matmul(
       std::move(inputs));
 }
 
+array qqmm(
+    array x,
+    array w,
+    array scales_x,
+    array scales_w,
+    bool transpose /* = true */,
+    std::optional<int> group_size_ /* = std::nullopt */,
+    std::optional<int> bits_ /* = std::nullopt */,
+    const std::string& mode /* = "nvfp4" */,
+    bool quantize_output /* = false */,
+    StreamOrDevice s /* = {} */, ) {
+  // currently only simetric quantization is supported for qqmm
+  auto qmode = string_to_quantization_mode(mode, tag);
+  // For nvfp4 MMAs only TN layout is supported on tensor cores
+  // https://docs.nvidia.com/cutlass/media/docs/cpp/blackwell_functionality.html
+  if (qmode == QuantizationMode::Nvfp4 && !transpose) {
+    std::ostringstream msg;
+    msg << "[" << tag
+        << "] Only TN layour is supported by tensor cores with nvfp4 quantization but "
+        << "transpose == false was provided.";
+    throw std::invalid_argument(msg.str());
+  }
+  auto [group_size, bits] =
+      quantization_params_from_mode(qmode, group_size_, bits_);
+  // Check and extract the quantized matrix shape against x
+  auto [w_inner_dims, w_outer_dims] = extract_quantized_matmul_dims(
+      "qqmm", x, w, scales_x, std::nullopt, transpose, group_size, bits);
+
+  if (qmode == QuantizationMode::Affine) {
+    dtype = promote_types(x.dtype(), dtype);
+  } else {
+    dtype = x.dtype();
+  }
+
+  if (x.ndim() > 2 && w.ndim() > 2) {
+    inputs = broadcast_arrays(inputs, {-2, -1}, s);
+  }
+
+  auto out_shape = inputs[0].shape();
+  out_shape.back() = w_outer_dims;
+  return array(
+      std::move(out_shape),
+      dtype,
+      std::make_shared<DualQuantizedMatmul>(
+          to_stream(s), group_size, bits, qmode, transpose),
+      std::move(inputs));
+}
+
 array pack_and_quantize(
     array& packed_w,
     const array& scales,

@@ -1649,12 +1649,14 @@ class DualQuantizedMatmul : public UnaryPrimitive {
       int group_size,
       int bits,
       QuantizationMode mode,
-      bool transpose)
+      bool transpose,
+      bool quantize_output)
       : UnaryPrimitive(stream),
         group_size_(group_size),
         bits_(bits),
         mode_(mode),
-        transpose_(transpose) {}
+        transpose_(transpose),
+        quantize_output_(quantize_output) {}
 
   void eval_cpu(const std::vector<array>& inputs, array& out) override;
   void eval_gpu(const std::vector<array>& inputs, array& out) override;
@@ -1665,7 +1667,8 @@ class DualQuantizedMatmul : public UnaryPrimitive {
   bool is_equivalent(const Primitive& other) const override;
   std::vector<Shape> output_shapes(const std::vector<array>& inputs) override;
   auto state() const {
-    return std::make_tuple(group_size_, bits_, mode_, transpose_);
+    return std::make_tuple(
+        group_size_, bits_, mode_, transpose_, quantize_output_);
   }
 
  private:
@@ -1673,6 +1676,7 @@ class DualQuantizedMatmul : public UnaryPrimitive {
   int bits_;
   QuantizationMode mode_;
   bool transpose_;
+  bool quantize_output_;
 };
 
 class GatherQMM : public UnaryPrimitive {
