@@ -1149,5 +1149,5 @@ void DualQuantizedMatmul::eval_cpu(
     const std::vector<array>& inputs,
     array& out) {
   throw std::runtime_error("DualQuantizedMatmul not implemented on CPU.");
-
+    }
 } // namespace mlx::core

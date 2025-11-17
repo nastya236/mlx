@@ -156,7 +156,7 @@ void repack_scales(
       output_size, scales_tiled.shape(), scales_tiled.strides(), large);
 
   enc.add_kernel_node(
-      cu::repack_scales_kernel,
+      cu::repack_scales,
       num_blocks,
       block_dims,
       0,
