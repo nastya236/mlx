@@ -55,8 +55,9 @@ target_sources(
           ${CMAKE_CURRENT_SOURCE_DIR}/quantized/affine_quantize.cu
           ${CMAKE_CURRENT_SOURCE_DIR}/quantized/fp_quantize.cu
           ${CMAKE_CURRENT_SOURCE_DIR}/quantized/quantized.cpp
+          ${CMAKE_CURRENT_SOURCE_DIR}/quantized/qqmm_utils.cu
           ${CMAKE_CURRENT_SOURCE_DIR}/quantized/convert_fp8.cu
-          # ${CMAKE_CURRENT_SOURCE_DIR}/quantized/cublas_qqmm.cpp
+          ${CMAKE_CURRENT_SOURCE_DIR}/quantized/cublas_qqmm.cpp
           ${CMAKE_CURRENT_SOURCE_DIR}/worker.cpp)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/binary)
