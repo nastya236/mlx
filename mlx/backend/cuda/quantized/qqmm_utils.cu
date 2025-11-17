@@ -88,12 +88,13 @@ scale_tiled_offset(size_t scale_index, size_t num_rows, size_t num_scale_cols) {
 
 namespace cu {
 
-__global__ void repack_scales(
-    const uint8_t* scales,
+__global__ void repack_scales_kernel(
+    const uint8_t* scales_linear,
     uint8_t* scales_tiled,
-    size_t num_scales,
-    size_t M,
-    size_t num_scale_cols) {
+    size_t input_rows,
+    size_t input_cols,
+    size_t output_rows,
+    size_t output_cols) {
   auto block_size = cg::this_thread_block().dim_threads();
   auto block_idx = cg::this_thread_block().group_index();
   auto idx_in_block = cg::this_thread_block().thread_index();
@@ -103,17 +104,28 @@ __global__ void repack_scales(
 
   auto grid_dim_x =
       cg::this_grid().dim_blocks().x * cg::this_grid().block_index().x;
-  size_t scale_index = tidx + grid_dim_x * size_t(tidy);
 
-  if (scale_index >= num_scales) {
+  size_t output_index = tidx + grid_dim_x * size_t(tidy);
+  size_t output_size = output_rows * output_cols;
+
+  if (output_index >= output_size) {
     return;
   }
 
-  // Compute tiled offset for this scale
-  size_t tiled_offset = scale_tiled_offset(scale_index, M, num_scale_cols);
+  size_t tiled_offset =
+      scale_tiled_offset(output_index, output_rows, output_cols);
 
-  // Copy scale from linear to tiled layout
-  scales_tiled[tiled_offset] = scales[scale_index];
+  size_t row = output_index / output_cols;
+  size_t col = output_index % output_cols;
+
+  if (row < input_rows && col < input_cols) {
+    // Copy actual scale value from linear input
+    size_t input_index = row * input_cols + col;
+    scales_tiled[tiled_offset] = scales_linear[input_index];
+  } else {
+    // Zero-fill padding region
+    scales_tiled[tiled_offset] = 0;
+  }
 }
 
 } // namespace cu
@@ -129,21 +141,31 @@ void repack_scales(
   enc.set_input_array(scales);
   enc.set_output_array(scales_tiled);
 
-  size_t num_scales = scales.size();
-  bool large = num_scales > UINT_MAX;
-  auto [num_blocks, block_dims] =
-      get_launch_args(num_scales, scales.shape(), scales.strides(), large);
+  // Note scales_tiled is padded to full tiles so if M or K/group_size
+  // are not multiples of tile sizes, the extra space is filled with zeros
+
+  size_t input_rows = M;
+  size_t input_cols = K / group_size;
+
+  size_t output_rows = scales_tiled.shape(0);
+  size_t output_cols = scales_tiled.shape(1);
+  size_t output_size = output_rows * output_cols;
+
+  bool large = output_size > UINT_MAX;
+  auto [num_blocks, block_dims] = get_launch_args(
+      output_size, scales_tiled.shape(), scales_tiled.strides(), large);
 
   enc.add_kernel_node(
-      cu::repack_scales,
+      cu::repack_scales_kernel,
       num_blocks,
       block_dims,
       0,
       gpu_ptr<uint8_t>(scales),
       gpu_ptr<uint8_t>(scales_tiled),
-      num_scales,
-      static_cast<size_t>(M),
-      static_cast<size_t>(K / group_size));
+      input_rows,
+      input_cols,
+      output_rows,
+      output_cols);
 }
 
 } // namespace mlx::core

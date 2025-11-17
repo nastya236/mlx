@@ -1,9 +1,9 @@
 // Copyright © 2025 Apple Inc.
 
 #include "mlx/backend/cuda/quantized/quantized.h"
-#include "mlx/backend/cuda/quantized/qqmm_utils.h"
-#include "mlx/backend/cuda/quantized/cublas_qqmm.h"
 #include "mlx/backend/cuda/device.h"
+#include "mlx/backend/cuda/quantized/cublas_qqmm.h"
+#include "mlx/backend/cuda/quantized/qqmm_utils.h"
 #include "mlx/backend/gpu/copy.h"
 #include "mlx/fast_primitives.h"
 
@@ -55,8 +55,19 @@ std::pair<array, array> repack_for_tensor_cores(
     int group_size,
     cu::CommandEncoder& encoder,
     const Stream& s) {
-  array scale_a_tiled(scale_a.shape(), uint8);
-  array scale_b_tiled(scale_b.shape(), uint8);
+  // Compute padded dimensions for full tiles (128 rows × 4 cols)
+  auto [padded_M, padded_cols_a] = get_padded_scale_dims(M, K, group_size);
+  auto [padded_N, padded_cols_b] = get_padded_scale_dims(N, K, group_size);
+
+  // When tensor dimensions are not multiples of the tile size above,
+  // it is necessary to still allocate full tile for storage and fill
+  // out of bounds values with zeroes.
+  // https://docs.nvidia.com/cuda/cublas/index.html#d-block-scaling-factors-layout
+
+  array scale_a_tiled(
+      {static_cast<int>(padded_M), static_cast<int>(padded_cols_a)}, uint8);
+  array scale_b_tiled(
+      {static_cast<int>(padded_N), static_cast<int>(padded_cols_b)}, uint8);
 
   scale_a_tiled.set_data(
       cu::malloc_async(scale_a_tiled.nbytes(), encoder.stream()));
@@ -64,6 +75,7 @@ std::pair<array, array> repack_for_tensor_cores(
       cu::malloc_async(scale_b_tiled.nbytes(), encoder.stream()));
 
   // Repack scales from linear to tiled layout
+  // Kernel will zero-fill out-of-bounds regions
   repack_scales(scale_a, scale_a_tiled, M, K, group_size, encoder, s);
   repack_scales(scale_b, scale_b_tiled, N, K, group_size, encoder, s);
   encoder.add_temporary(scale_a_tiled);
@@ -113,7 +125,7 @@ void fast::Quantize::eval_gpu(
 }
 
 namespace {
-  void qqmm_impl(
+void qqmm_impl(
     cu::CommandEncoder& encoder,
     int M,
     int N,
@@ -130,15 +142,7 @@ namespace {
     float alpha = 1.0f) {
   // Invoke CublasQQMM for quantized matrix multiplication
   CublasQQMM qqmm(
-      encoder.device(), 
-      a_transposed, 
-      M, 
-      K, 
-      lda, 
-      b_transposed,
-      N, 
-      K, 
-      ldb);
+      encoder.device(), a_transposed, M, K, lda, b_transposed, N, K, ldb);
 
   qqmm.run(encoder, out, a, b, a_scale, b_scale, alpha);
 }
@@ -194,6 +198,5 @@ void QQMatmul::eval_gpu(const std::vector<array>& inputs, array& out) {
       scale_a_tiled,
       scale_b_tiled);
 }
-
 
 } // namespace mlx::core
