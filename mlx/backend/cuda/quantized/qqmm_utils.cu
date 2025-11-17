@@ -47,7 +47,7 @@ __device__ size_t
 scale_tiled_offset(size_t scale_index, size_t num_rows, size_t num_scale_cols) {
   // Compute the tiled layout offset for scale factors used in tensor cores
   // This function maps from a linear scale index to the tiled layout expected
-  // by cuBLAS tensor cores.
+  // by tensor cores (and cublaslt).
   //
   // Input: linear scale index (e.g., for a matrix M x K with group_size,
   //        scale_index ranges from 0 to (M * K/group_size - 1))
@@ -88,7 +88,7 @@ scale_tiled_offset(size_t scale_index, size_t num_rows, size_t num_scale_cols) {
 
 namespace cu {
 
-__global__ void repack_scales_kernel(
+__global__ void repack_scales(
     const uint8_t* scales_linear,
     uint8_t* scales_tiled,
     size_t input_rows,
@@ -118,8 +118,9 @@ __global__ void repack_scales_kernel(
   size_t row = output_index / output_cols;
   size_t col = output_index % output_cols;
 
+  // Probably this can be done better with 2 separated paths for valid and
+  // padding
   if (row < input_rows && col < input_cols) {
-    // Copy actual scale value from linear input
     size_t input_index = row * input_cols + col;
     scales_tiled[tiled_offset] = scales_linear[input_index];
   } else {

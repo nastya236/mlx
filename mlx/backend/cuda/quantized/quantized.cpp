@@ -151,8 +151,10 @@ void qqmm_impl(
 }
 } // namespace
 
-void QQMatmul::eval_gpu(const std::vector<array>& inputs, array& out) {
-  nvtx3::scoped_range r("QQMatmul::eval_gpu");
+void DualQuantizedMatmul::eval_gpu(
+    const std::vector<array>& inputs,
+    array& out) {
+  nvtx3::scoped_range r("DualQuantizedMatmul::eval_gpu");
   // WIP need to add primitive
   // TODO: for now minimalistic implementation without batching support
   auto& s = stream();
