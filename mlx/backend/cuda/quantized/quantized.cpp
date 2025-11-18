@@ -6,7 +6,7 @@
 #include "mlx/backend/cuda/quantized/qqmm_utils.h"
 #include "mlx/backend/gpu/copy.h"
 #include "mlx/fast_primitives.h"
-
+#include <iostream>
 #include <nvtx3/nvtx3.hpp>
 
 namespace mlx::core {
@@ -48,21 +48,23 @@ inline array ensure_row_contiguous_matrix(
 
 array pad_and_repack_scales(
     const array& scale,
-    array& scale_tiled,
     cu::CommandEncoder& encoder,
     const Stream& s) {
    // Compute padded dimensions for full tiles (128 rows × 4 cols)
-  auto [padded_outer, padded_inner] = get_padded_scale_dims(scale.shape()[-2], scale.shape()[-1]);
+  auto [pad_outer, pad_inner] = get_padded_scale_dims(scale.shape(-2), scale.shape(-1));
   // cuBLAS requirements for scale factor layout:
   // 1. Dimensions must be padded to full tiles (128 rows × 4 cols)
   // 2. Out-of-bounds values must be filled with zeros
   // 3. Starting addresses must be 16-byte aligned
   // https://docs.nvidia.com/cuda/cublas/index.html#d-block-scaling-factors-layout
   // Note: cu::malloc_async already provides 256-byte alignment
-  array scale_a_tiled({padded_outer, padded_inner}, uint8);
-  scale_tiled.set_data(
-      cu::malloc_async(scale_tiled.nbytes(), encoder.stream()));
+  array scale_tiled(
+    cu::malloc_async(pad_outer * pad_inner, encoder.stream()),
+    Shape{pad_outer, pad_inner},
+    scale.dtype());
+  std::cout << "Allocated scale_tiled with shape: " << scale_tiled.shape() << std::endl;
   repack_scales(scale, scale_tiled, encoder, s);
+  
   encoder.add_temporary(scale_tiled);
   return scale_tiled;
 }
@@ -160,13 +162,11 @@ void DualQuantizedMatmul::eval_gpu(
   int K = K_packed * (32 / bits_);
 
   // Repack scales from linear to tiled layout for tensor cores
-  array scale_a_tiled = pad_and_repack_scales(
-      scale_a_pre, scale_a_tiled, encoder, s);
-  array scale_b_tiled = pad_and_repack_scales(
-      scale_b_pre, scale_b_tiled, encoder, s);
+  array scale_a_tiled = pad_and_repack_scales(scale_a_pre, encoder, s);
+  array scale_b_tiled = pad_and_repack_scales(scale_b_pre, encoder, s);
 
+  std::cout << "A scale tiled shape: " << scale_a_tiled.shape() << ", B scale tiled shape: " << scale_b_tiled.shape() << std::endl;
 
-  // Set transpose flags and leading dimensions for TN layout
   bool a_transposed = false; // a is normal (M x K)
   bool b_transposed = true; // b is transposed (N x K -> K x N)
   int64_t lda = K; // Leading dimension of a (packed)
