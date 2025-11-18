@@ -1,14 +1,14 @@
 // Copyright © 2025 Apple Inc.
 
-#include "mlx/backend/common/matmul.h"
 #include "mlx/backend/cuda/quantized/quantized.h"
+#include <nvtx3/nvtx3.hpp>
+#include <iostream>
+#include "mlx/backend/common/matmul.h"
 #include "mlx/backend/cuda/device.h"
 #include "mlx/backend/cuda/quantized/cublas_qqmm.h"
 #include "mlx/backend/cuda/quantized/qqmm_utils.h"
 #include "mlx/backend/gpu/copy.h"
 #include "mlx/fast_primitives.h"
-#include <iostream>
-#include <nvtx3/nvtx3.hpp>
 
 namespace mlx::core {
 
@@ -51,8 +51,9 @@ array pad_and_repack_scales(
     const array& scale,
     cu::CommandEncoder& encoder,
     const Stream& s) {
-   // Compute padded dimensions for full tiles (128 rows × 4 cols)
-  auto [pad_outer, pad_inner] = get_padded_scale_dims(scale.shape(-2), scale.shape(-1));
+  // Compute padded dimensions for full tiles (128 rows × 4 cols)
+  auto [pad_outer, pad_inner] =
+      get_padded_scale_dims(scale.shape(-2), scale.shape(-1));
   // cuBLAS requirements for scale factor layout:
   // 1. Dimensions must be padded to full tiles (128 rows × 4 cols)
   // 2. Out-of-bounds values must be filled with zeros
@@ -60,12 +61,13 @@ array pad_and_repack_scales(
   // https://docs.nvidia.com/cuda/cublas/index.html#d-block-scaling-factors-layout
   // Note: cu::malloc_async already provides 256-byte alignment
   array scale_tiled(
-    cu::malloc_async(pad_outer * pad_inner, encoder.stream()),
-    Shape{pad_outer, pad_inner},
-    scale.dtype());
-  std::cout << "Allocated scale_tiled with shape: " << scale_tiled.shape() << std::endl;
+      cu::malloc_async(pad_outer * pad_inner, encoder.stream()),
+      Shape{pad_outer, pad_inner},
+      scale.dtype());
+  std::cout << "Allocated scale_tiled with shape: " << scale_tiled.shape()
+            << std::endl;
   repack_scales(scale, scale_tiled, encoder, s);
-  
+
   encoder.add_temporary(scale_tiled);
   return scale_tiled;
 }
@@ -127,10 +129,10 @@ void qqmm_impl(
     const array& b_scale,
     QuantizationMode mode,
     float alpha = 1.0f) {
-  // Invoke CublasQQMM 
+  // Invoke CublasQQMM
   auto [batch_shape, a_batch_strides, b_batch_strides] = collapse_batches(a, b);
   auto batch_count = out.size() / (M * N);
-  
+
   std::string_view qmode = quantization_mode_to_string(mode);
   if (batch_count > 1 && !a_transposed && batch_shape.size() == 1 &&
       a.strides()[a.ndim() - 2] == K && a_batch_strides.back() == M * K &&
@@ -157,8 +159,18 @@ void qqmm_impl(
       batch_shape.back(),
       a_batch_strides.back(),
       b_batch_strides.back());
-      
-  qqmm.run(encoder, out, a, b, a_scale, b_scale, batch_shape, a_batch_strides, b_batch_strides, alpha);
+
+  qqmm.run(
+      encoder,
+      out,
+      a,
+      b,
+      a_scale,
+      b_scale,
+      batch_shape,
+      a_batch_strides,
+      b_batch_strides,
+      alpha);
 }
 } // namespace
 
@@ -194,7 +206,8 @@ void DualQuantizedMatmul::eval_gpu(
   array scale_a_tiled = pad_and_repack_scales(scale_a_pre, encoder, s);
   array scale_b_tiled = pad_and_repack_scales(scale_b_pre, encoder, s);
 
-  std::cout << "A scale tiled shape: " << scale_a_tiled.shape() << ", B scale tiled shape: " << scale_b_tiled.shape() << std::endl;
+  std::cout << "A scale tiled shape: " << scale_a_tiled.shape()
+            << ", B scale tiled shape: " << scale_b_tiled.shape() << std::endl;
 
   bool a_transposed = false; // a is normal (M x K)
   bool b_transposed = true; // b is transposed (N x K -> K x N)
@@ -214,7 +227,7 @@ void DualQuantizedMatmul::eval_gpu(
       a,
       b,
       scale_a_tiled,
-      scale_b_tiled, 
+      scale_b_tiled,
       mode_);
 }
 

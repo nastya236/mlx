@@ -9,8 +9,7 @@ namespace mlx::core {
 
 // Compute padded dimensions for tiled layout
 // Tiles are 128 rows × 4 columns, must allocate full tiles
-inline std::pair<int, int>
-get_padded_scale_dims(int num_rows, int num_cols) {
+inline std::pair<int, int> get_padded_scale_dims(int num_rows, int num_cols) {
   constexpr int rows_per_tile = 128;
   constexpr int cols_per_tile = 4;
 

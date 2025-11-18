@@ -21,9 +21,9 @@ class CublasQQMM {
       uint64_t b_cols,
       int64_t ldb,
       std::string_view quantization_mode,
-    int32_t batch_count,
-    int64_t a_batch_stride,
-    int64_t b_batch_stride);
+      int32_t batch_count,
+      int64_t a_batch_stride,
+      int64_t b_batch_stride);
 
   ~CublasQQMM();
 
@@ -34,9 +34,9 @@ class CublasQQMM {
       const array& b,
       const array& a_scale,
       const array& b_scale,
-        const Shape& batch_shape,
-        const Strides& a_batch_strides,
-        const Strides& b_batch_strides,
+      const Shape& batch_shape,
+      const Strides& a_batch_strides,
+      const Strides& b_batch_strides,
       float alpha = 1.0f);
 
   //   void run(

@@ -13,7 +13,7 @@ namespace mlx::core {
 
 namespace {
 
-// Currently cublas supports only mxfp8 and nvfp4 
+// Currently cublas supports only mxfp8 and nvfp4
 // quantization modes for block scaled quantization
 cudaDataType_t qmode_to_cublas_scale_dtype(std::string_view mode) {
   if (mode == "mxfp8") {
@@ -21,8 +21,8 @@ cudaDataType_t qmode_to_cublas_scale_dtype(std::string_view mode) {
   } else if (mode == "nvfp4") {
     return CUDA_R_8F_UE4M3;
   } else {
-    throw std::runtime_error(fmt::format(
-        "Unsupported quantization mode in CublasQQMM: {}.", mode));
+    throw std::runtime_error(
+        fmt::format("Unsupported quantization mode in CublasQQMM: {}.", mode));
   }
 }
 
@@ -32,8 +32,8 @@ cudaDataType_t qmode_to_cublas_dtype(std::string_view mode) {
   } else if (mode == "nvfp4") {
     return CUDA_R_4F_E2M1;
   } else {
-    throw std::runtime_error(fmt::format(
-        "Unsupported quantization mode in CublasQQMM: {}.", mode));
+    throw std::runtime_error(
+        fmt::format("Unsupported quantization mode in CublasQQMM: {}.", mode));
   }
 }
 
@@ -43,8 +43,8 @@ cublasLtMatmulMatrixScale_t qmode_to_cublas_scale_mode(std::string_view mode) {
   } else if (mode == "nvfp4") {
     return CUBLASLT_MATMUL_MATRIX_SCALE_VEC16_UE4M3;
   } else {
-    throw std::runtime_error(fmt::format(
-        "Unsupported quantization mode in CublasQQMM: {}.", mode));
+    throw std::runtime_error(
+        fmt::format("Unsupported quantization mode in CublasQQMM: {}.", mode));
   }
 }
 
@@ -59,7 +59,7 @@ CublasQQMM::CublasQQMM(
     bool b_transposed,
     uint64_t b_rows,
     uint64_t b_cols,
-    int64_t ldb, 
+    int64_t ldb,
     std::string_view qmode,
     int32_t batch_count,
     int64_t a_batch_stride,
@@ -68,13 +68,13 @@ CublasQQMM::CublasQQMM(
       pref_(cublas_utils::get_preference(device)),
       M_(a_transposed ? a_cols : a_rows),
       N_(b_transposed ? b_rows : b_cols) {
-
   a_scale_mode_ = qmode_to_cublas_scale_mode(qmode);
-  b_scale_mode_ = qmode_to_cublas_scale_mode(qmode); 
-    
+  b_scale_mode_ = qmode_to_cublas_scale_mode(qmode);
+
   heuristic_.state = CUBLAS_STATUS_NOT_INITIALIZED;
 
-  cublasComputeType_t gemm_compute_type = CUBLAS_COMPUTE_32F; // always for narrow precision
+  cublasComputeType_t gemm_compute_type =
+      CUBLAS_COMPUTE_32F; // always for narrow precision
   CHECK_CUBLAS_ERROR(
       cublasLtMatmulDescCreate(&matmul_desc_, gemm_compute_type, CUDA_R_32F));
 
@@ -110,31 +110,31 @@ CublasQQMM::CublasQQMM(
       &b_scale_mode_,
       sizeof(b_scale_mode_)));
 
-    // a and b are swaped 
-    a_desc_ = cublas_utils::create_matrix_layout(
-        qmode_to_cublas_dtype(qmode),
-        b_cols,
-        b_rows,
-        b_transposed,
-        ldb,
-        batch_count,
-        b_batch_stride);
-    b_desc_ = cublas_utils::create_matrix_layout(
-        qmode_to_cublas_dtype(qmode),
-        a_cols,
-        a_rows,
-        a_transposed,
-        lda,
-        batch_count,
-        a_batch_stride);
-    out_desc_ = cublas_utils::create_matrix_layout(
-        CUDA_R_16BF, // output in bf16 (TODO)
-        b_transposed ? b_rows : b_cols, // n
-        a_transposed ? a_cols : a_rows, // m
-        false,
-        b_transposed ? b_rows : b_cols,
-        batch_count,
-        a_rows * b_cols);
+  // a and b are swaped
+  a_desc_ = cublas_utils::create_matrix_layout(
+      qmode_to_cublas_dtype(qmode),
+      b_cols,
+      b_rows,
+      b_transposed,
+      ldb,
+      batch_count,
+      b_batch_stride);
+  b_desc_ = cublas_utils::create_matrix_layout(
+      qmode_to_cublas_dtype(qmode),
+      a_cols,
+      a_rows,
+      a_transposed,
+      lda,
+      batch_count,
+      a_batch_stride);
+  out_desc_ = cublas_utils::create_matrix_layout(
+      CUDA_R_16BF, // output in bf16 (TODO)
+      b_transposed ? b_rows : b_cols, // n
+      a_transposed ? a_cols : a_rows, // m
+      false,
+      b_transposed ? b_rows : b_cols,
+      batch_count,
+      a_rows * b_cols);
 
   CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutCreate(
       &a_desc_, qmode_to_cublas_dtype(qmode), b_cols, b_rows, ldb));
@@ -168,18 +168,18 @@ void CublasQQMM::run(
     const Strides& b_batch_strides,
     float alpha) {
   int batch_count = out.size() / (M_ * N_);
-//   if (batch_count / batch_shape.back() > 1) {
-//     run_batched(
-//         encoder,
-//         out,
-//         a,
-//         b,
-//         batch_shape,
-//         a_batch_strides,
-//         b_batch_strides,
-//         alpha);
-//     return;
-//   }
+  //   if (batch_count / batch_shape.back() > 1) {
+  //     run_batched(
+  //         encoder,
+  //         out,
+  //         a,
+  //         b,
+  //         batch_shape,
+  //         a_batch_strides,
+  //         b_batch_strides,
+  //         alpha);
+  //     return;
+  //   }
 
   encoder.set_input_array(a);
   encoder.set_input_array(b);
@@ -208,7 +208,6 @@ void CublasQQMM::execute(
     const void* c,
     float alpha /* = 1 */,
     float beta /* = 0 */) {
-
   CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
       matmul_desc_,
       CUBLASLT_MATMUL_DESC_A_SCALE_POINTER,
