@@ -3,11 +3,51 @@
 #include "mlx/backend/cuda/quantized/cublas_qqmm.h"
 #include <fmt/format.h>
 #include "mlx/backend/cuda/cublas_utils.h"
+
 #include "mlx/backend/cuda/device.h"
 #include "mlx/dtype_utils.h"
 #include "mlx/utils.h"
 
 namespace mlx::core {
+
+namespace {
+
+// Currently cublas supports only mxfp8 and nvfp4 
+// quantization modes for block scaled quantization
+cudaDataType_t qmode_to_cublas_scale_dtype(std::string_view mode) {
+  if (mode == "mxfp8") {
+    return CUDA_R_8F_UE8M0;
+  } else if (mode == "nvfp4") {
+    return CUDA_R_8F_UE4M3;
+  } else {
+    throw std::runtime_error(fmt::format(
+        "Unsupported quantization mode in CublasQQMM: {}.", mode));
+  }
+}
+
+cudaDataType_t qmode_to_cublas_dtype(std::string_view mode) {
+  if (mode == "mxfp8") {
+    return CUDA_R_8F_E4M3;
+  } else if (mode == "nvfp4") {
+    return CUDA_R_4F_E2M1;
+  } else {
+    throw std::runtime_error(fmt::format(
+        "Unsupported quantization mode in CublasQQMM: {}.", mode));
+  }
+}
+
+cublasLtMatrixScaleMode_t qmode_to_cublas_scale_mode(std::string_view mode) {
+  if (mode == "mxfp8") {
+    return CUBLASLT_MATMUL_MATRIX_SCALE_VEC32_UE8M0;
+  } else if (mode == "nvfp4") {
+    return CUBLASLT_MATMUL_MATRIX_SCALE_VEC16_UE4M3;
+  } else {
+    throw std::runtime_error(fmt::format(
+        "Unsupported quantization mode in CublasQQMM: {}.", mode));
+  }
+}
+
+} // namespace
 
 CublasQQMM::CublasQQMM(
     cu::Device& device,
@@ -18,19 +58,22 @@ CublasQQMM::CublasQQMM(
     bool b_transposed,
     uint64_t b_rows,
     uint64_t b_cols,
-    int64_t ldb)
-    // int32_t batch_count,
-    // int64_t a_batch_stride,
-    // int64_t b_batch_stride)
+    int64_t ldb, 
+    std::string_view quantization_mode,
+    int32_t batch_count,
+    int64_t a_batch_stride,
+    int64_t b_batch_stride)
     : handle_(device.lt_handle()),
       pref_(cublas_utils::get_preference(device)),
-      M_(a_rows),
-      N_(b_transposed ? b_rows : b_cols) {
-  // here b_transposed should be always true (TN layout)
-  // for nvfp4
+      M_(a_transposed ? a_cols : a_rows),
+      N_(b_transposed ? b_rows : b_cols), {
+
+  a_scale_mode_ = qmode_to_cublas_scale_mode(quantization_mode);
+  b_scale_mode_ = qmode_to_cublas_scale_mode(quantization_mode); 
+    
   heuristic_.state = CUBLAS_STATUS_NOT_INITIALIZED;
 
-  cublasComputeType_t gemm_compute_type = CUBLAS_COMPUTE_32F;
+  cublasComputeType_t gemm_compute_type = CUBLAS_COMPUTE_32F; // always for narrow precision
   CHECK_CUBLAS_ERROR(
       cublasLtMatmulDescCreate(&matmul_desc_, gemm_compute_type, CUDA_R_32F));
 
@@ -55,35 +98,53 @@ CublasQQMM::CublasQQMM(
       &pointer_mode,
       sizeof(int32_t)));
 
-  // scales:
-  //  TODO this is just for NVFP4 for now, need to generalize later
-  a_scale_mode_ = CUBLASLT_MATMUL_MATRIX_SCALE_VEC16_UE4M3;
-  b_scale_mode_ = CUBLASLT_MATMUL_MATRIX_SCALE_VEC16_UE4M3;
-
   CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
       matmul_desc_,
-      CUBLASLT_MATMUL_DESC_A_SCALE_MODE,
+      CUBLASLT_MATMUL_DESC_B_SCALE_MODE,
       &a_scale_mode_,
       sizeof(a_scale_mode_)));
   CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
       matmul_desc_,
-      CUBLASLT_MATMUL_DESC_B_SCALE_MODE,
+      CUBLASLT_MATMUL_DESC_A_SCALE_MODE,
       &b_scale_mode_,
       sizeof(b_scale_mode_)));
 
-  // here i need to set CUBLASLT_MATMUL_DESC_A_SCALE_POINTERs
+    // a and b are swaped 
+    a_desc_ = cublas_utils::create_matrix_layout(
+        qmode_to_cublas_dtype(quantization_mode),
+        b_cols,
+        b_rows,
+        b_transposed,
+        ldb,
+        batch_count,
+        b_batch_stride);
+    b_desc_ = cublas_utils::create_matrix_layout(
+        qmode_to_cublas_dtype(quantization_mode),
+        a_cols,
+        a_rows,
+        a_transposed,
+        lda,
+        batch_count,
+        a_batch_stride);
+    out_desc_ = cublas_utils::create_matrix_layout(
+        CUDA_R_16BF, // output in bf16 (TODO)
+        b_transposed ? b_rows : b_cols, // n
+        a_transposed ? a_rows : a_cols, // m
+        false,
+        b_transposed ? b_rows : b_cols,
+        batch_count,
+        a_rows * b_cols);
 
-  // creating layouts for A, B, and output matrices
-  CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutCreate(
-      &a_desc_, CUDA_R_4F_E2M1, b_cols, b_rows, ldb));
-  CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutCreate(
-      &b_desc_, CUDA_R_4F_E2M1, a_cols, a_rows, lda));
-  CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutCreate(
-      &out_desc_,
-      CUDA_R_16BF, // output in bf16
-      b_transposed ? b_rows : b_cols, // m
-      a_rows, // asume that never transposed (supported only TN layout)
-      b_transposed ? b_rows : b_cols));
+//   CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutCreate(
+//       &a_desc_, , b_cols, b_rows, ldb));
+//   CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutCreate(
+//       &b_desc_, CUDA_R_4F_E2M1, a_cols, a_rows, lda));
+//   CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutCreate(
+//       &out_desc_,
+//       CUDA_R_16BF, // output in bf16
+//       b_transposed ? b_rows : b_cols, // m
+//       a_rows, // asume that never transposed (supported only TN layout)
+//       b_transposed ? b_rows : b_cols));
 }
 
 CublasQQMM::~CublasQQMM() {
@@ -101,23 +162,23 @@ void CublasQQMM::run(
     const array& b,
     const array& a_scale,
     const array& b_scale,
-    // const Shape& batch_shape,
-    // const Strides& a_batch_strides,
-    // const Strides& b_batch_strides,
+    const Shape& batch_shape,
+    const Strides& a_batch_strides,
+    const Strides& b_batch_strides,
     float alpha) {
-  // int batch_count = out.size() / (M_ * N_);
-  // if (batch_count / batch_shape.back() > 1) {
-  //   run_batched(
-  //       encoder,
-  //       out,
-  //       a,
-  //       b,
-  //       batch_shape,
-  //       a_batch_strides,
-  //       b_batch_strides,
-  //       alpha);
-  //   return;
-  // }
+  int batch_count = out.size() / (M_ * N_);
+//   if (batch_count / batch_shape.back() > 1) {
+//     run_batched(
+//         encoder,
+//         out,
+//         a,
+//         b,
+//         batch_shape,
+//         a_batch_strides,
+//         b_batch_strides,
+//         alpha);
+//     return;
+//   }
 
   encoder.set_input_array(a);
   encoder.set_input_array(b);
@@ -146,7 +207,6 @@ void CublasQQMM::execute(
     const void* c,
     float alpha /* = 1 */,
     float beta /* = 0 */) {
-  // Set scale pointers (quantized-specific)
 
   CHECK_CUBLAS_ERROR(cublasLtMatmulDescSetAttribute(
       matmul_desc_,
@@ -162,7 +222,6 @@ void CublasQQMM::execute(
   const void* alpha_ptr = &alpha;
   const void* beta_ptr = &beta;
 
-  // Use shared matmul execution
   cublas_utils::execute_matmul(
       encoder,
       handle_,
