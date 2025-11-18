@@ -25,8 +25,6 @@ get_padded_scale_dims(int num_rows, int num_cols) {
 void repack_scales(
     const array& scales,
     array& scales_tiled,
-    int num_rows,
-    int num_cols,
     cu::CommandEncoder& enc,
     const Stream& s);
 

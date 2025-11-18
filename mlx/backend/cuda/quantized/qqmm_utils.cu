@@ -134,8 +134,6 @@ __global__ void repack_scales(
 void repack_scales(
     const array& scales,
     array& scales_tiled,
-    int num_rows,
-    int num_cols,
     cu::CommandEncoder& enc,
     const Stream& s) {
   enc.set_input_array(scales);
@@ -144,11 +142,11 @@ void repack_scales(
   // Note: scales_tiled is padded to full tiles so if num_rows or num_cols
   // are not multiples of tile sizes, the extra space is filled with zeros
 
-  size_t input_rows = num_rows;
-  size_t input_cols = num_cols;
+  size_t input_rows = scales.shape(-2);
+  size_t input_cols = scales.shape(-1);
 
-  size_t output_rows = scales_tiled.shape(0);
-  size_t output_cols = scales_tiled.shape(1);
+  size_t output_rows = scales_tiled.shape(-2);
+  size_t output_cols = scales_tiled.shape(-1);
   size_t output_size = output_rows * output_cols;
 
   bool large = output_size > UINT_MAX;

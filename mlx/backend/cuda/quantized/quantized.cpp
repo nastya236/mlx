@@ -46,48 +46,25 @@ inline array ensure_row_contiguous_matrix(
   return x_copy;
 }
 
-std::pair<array, array> repack_for_tensor_cores(
-    const array& scale_a,
-    const array& scale_b,
-    int M,
-    int N,
-    int K,
-    int group_size,
+array pad_and_repack_scales(
+    const array& scale,
+    array& scale_tiled,
     cu::CommandEncoder& encoder,
     const Stream& s) {
-  // Compute actual scale dimensions
-  int num_scale_cols = K / group_size;
-
-  // Compute padded dimensions for full tiles (128 rows × 4 cols)
-  auto [padded_M, padded_cols_a] = get_padded_scale_dims(M, num_scale_cols);
-  auto [padded_N, padded_cols_b] = get_padded_scale_dims(N, num_scale_cols);
-
+   // Compute padded dimensions for full tiles (128 rows × 4 cols)
+  auto [padded_outer, padded_inner] = get_padded_scale_dims(scale.shape()[-2], scale.shape()[-1]);
   // cuBLAS requirements for scale factor layout:
   // 1. Dimensions must be padded to full tiles (128 rows × 4 cols)
   // 2. Out-of-bounds values must be filled with zeros
   // 3. Starting addresses must be 16-byte aligned
   // https://docs.nvidia.com/cuda/cublas/index.html#d-block-scaling-factors-layout
-  //
-  // Note: cu::malloc_async provides 256-byte alignment, satisfying requirement
-  // #3
-
-  array scale_a_tiled(
-      {static_cast<int>(padded_M), static_cast<int>(padded_cols_a)}, uint8);
-  array scale_b_tiled(
-      {static_cast<int>(padded_N), static_cast<int>(padded_cols_b)}, uint8);
-
-  scale_a_tiled.set_data(
-      cu::malloc_async(scale_a_tiled.nbytes(), encoder.stream()));
-  scale_b_tiled.set_data(
-      cu::malloc_async(scale_b_tiled.nbytes(), encoder.stream()));
-
-  // Repack scales from linear to tiled layout (handles requirements #1 and #2)
-  repack_scales(scale_a, scale_a_tiled, M, num_scale_cols, encoder, s);
-  repack_scales(scale_b, scale_b_tiled, N, num_scale_cols, encoder, s);
-  encoder.add_temporary(scale_a_tiled);
-  encoder.add_temporary(scale_b_tiled);
-
-  return {scale_a_tiled, scale_b_tiled};
+  // Note: cu::malloc_async already provides 256-byte alignment
+  array scale_a_tiled({padded_outer, padded_inner}, uint8);
+  scale_tiled.set_data(
+      cu::malloc_async(scale_tiled.nbytes(), encoder.stream()));
+  repack_scales(scale, scale_tiled, encoder, s);
+  encoder.add_temporary(scale_tiled);
+  return scale_tiled;
 }
 
 } // namespace
@@ -179,17 +156,21 @@ void DualQuantizedMatmul::eval_gpu(
 
   int M = a.shape(-2);
   int N = b.shape(-2); // b always transposed
-  int K = a.shape(-1);
+  int K_packed = a.shape(-1);
+  int K = K_packed * (32 / bits_);
 
   // Repack scales from linear to tiled layout for tensor cores
-  auto [scale_a_tiled, scale_b_tiled] = repack_for_tensor_cores(
-      scale_a_pre, scale_b_pre, M, N, K, group_size_, encoder, s);
+  array scale_a_tiled = pad_and_repack_scales(
+      scale_a_pre, scale_a_tiled, encoder, s);
+  array scale_b_tiled = pad_and_repack_scales(
+      scale_b_pre, scale_b_tiled, encoder, s);
+
 
   // Set transpose flags and leading dimensions for TN layout
   bool a_transposed = false; // a is normal (M x K)
   bool b_transposed = true; // b is transposed (N x K -> K x N)
-  int64_t lda = K; // Leading dimension of a
-  int64_t ldb = K; // Leading dimension of b
+  int64_t lda = K; // Leading dimension of a (packed)
+  int64_t ldb = K; // Leading dimension of b (packed)
 
   qqmm_impl(
       encoder,

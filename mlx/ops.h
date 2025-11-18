@@ -1404,14 +1404,15 @@ std::vector<array> quantize(
     StreamOrDevice s = {});
 
 array qqmm(
-    const array& x,
-    const array& w,
-    const array& x_scales,
-    const array& w_scales,
+    const array x,
+    const array w,
+    const array x_scales,
+    const array w_scales,
     bool transpose = true,
     std::optional<int> group_size = std::nullopt,
     std::optional<int> bits = std::nullopt,
     const std::string& mode = "nvfp4",
+    bool quantize_output = false,
     StreamOrDevice s = {});
 
 /** Dequantize a matrix produced by quantize() */

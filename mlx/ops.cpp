@@ -4252,6 +4252,7 @@ array qqmm(
   auto [group_size, bits] =
       quantization_params_from_mode(qmode, group_size_, bits_);
   // Check and extract the quantized matrix shape against x
+
   auto [x_dims, w_dims] =
       extract_qqmm_dims(
           "qqmm", x, w, scales_x, scales_w, transpose, group_size, bits);
@@ -4265,12 +4266,10 @@ array qqmm(
   }
 
   auto out_shape = inputs[0].shape();
-  if (quantize_output) {
-    out_shape.back() =
-        w_outer_dims; // result should be the same shape as quantized w
+  if (!quantize_output) {
+    out_shape.back() = w_outer_dims; // result should be the same shape (M, N) if not packed in uint32
   } else {
-    int expansion = (bits == 8) ? 2 : 4;
-    out_shape.back() = w_outer_dims * ((bits == 8) ? 4 : 8);
+    out_shape.back() = w_outer_dims / (32 / bits); // packed output 
   }
 
   // out dtype can be only bf16 if not quantized

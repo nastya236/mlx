@@ -16,6 +16,7 @@
 #include "mlx/ops.h"
 #include "mlx/primitives.h"
 #include "mlx/utils.h"
+#include <iostream>
 
 namespace mlx::core {
 
@@ -3476,11 +3477,12 @@ bool DualQuantizedMatmul::is_equivalent(const Primitive& other) const {
 
 std::vector<Shape> DualQuantizedMatmul::output_shapes(
     const std::vector<array>& inputs) {
-  auto out_shape = inputs[0].shape(); // M
+  auto out_shape = inputs[0].shape();
   auto& w = inputs[1];
   int w_outer_dims = (transpose_) ? w.shape(-2) : w.shape(-1);
-  w_outer_dims *= quantize_output_ ? 1 : (32 / bits_); // 
+  w_outer_dims /= quantize_output_ ? (32 / bits_) : 1; 
   out_shape.back() = w_outer_dims;
+  std::cout << "DualQuantizedMatmul output shape: " << out_shape << std::endl;
   return {std::move(out_shape)};
 }
 
