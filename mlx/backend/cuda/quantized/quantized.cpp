@@ -144,20 +144,20 @@ void qqmm_impl(
   }
 
   CublasQQMM qqmm(
-      encoder.device(), 
-      a_transposed, 
+      encoder.device(),
+      a_transposed,
       M,
-      K, 
-      lda, 
-      b_transposed, 
-      N, 
-      K, 
+      K,
+      lda,
+      b_transposed,
+      N,
+      K,
       ldb,
       qmode,
-      batch_count,  
-      a_batch_strides,
-      b_batch_strides,
-  );
+      batch_shape.back(),
+      a_batch_strides.back(),
+      b_batch_strides.back());
+      
   qqmm.run(encoder, out, a, b, a_scale, b_scale, batch_shape, a_batch_strides, b_batch_strides, alpha);
 }
 } // namespace

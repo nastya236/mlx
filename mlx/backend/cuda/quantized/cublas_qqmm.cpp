@@ -130,22 +130,22 @@ CublasQQMM::CublasQQMM(
     out_desc_ = cublas_utils::create_matrix_layout(
         CUDA_R_16BF, // output in bf16 (TODO)
         b_transposed ? b_rows : b_cols, // n
-        a_transposed ? a_rows : a_cols, // m
+        a_transposed ? a_cols : a_rows, // m
         false,
         b_transposed ? b_rows : b_cols,
         batch_count,
         a_rows * b_cols);
 
-//   CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutCreate(
-//       &a_desc_, , b_cols, b_rows, ldb));
-//   CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutCreate(
-//       &b_desc_, CUDA_R_4F_E2M1, a_cols, a_rows, lda));
-//   CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutCreate(
-//       &out_desc_,
-//       CUDA_R_16BF, // output in bf16
-//       b_transposed ? b_rows : b_cols, // m
-//       a_rows, // asume that never transposed (supported only TN layout)
-//       b_transposed ? b_rows : b_cols));
+  CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutCreate(
+      &a_desc_, qmode_to_cublas_dtype(qmode), b_cols, b_rows, ldb));
+  CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutCreate(
+      &b_desc_, qmode_to_cublas_dtype(qmode), a_cols, a_rows, lda));
+  CHECK_CUBLAS_ERROR(cublasLtMatrixLayoutCreate(
+      &out_desc_,
+      CUDA_R_16BF, // output in bf16
+      b_transposed ? b_rows : b_cols, // m
+      a_rows, // asume that never transposed (supported only TN layout)
+      b_transposed ? b_rows : b_cols));
 }
 
 CublasQQMM::~CublasQQMM() {
