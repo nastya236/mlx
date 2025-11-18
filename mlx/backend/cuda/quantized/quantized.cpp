@@ -2,7 +2,6 @@
 
 #include "mlx/backend/cuda/quantized/quantized.h"
 #include <nvtx3/nvtx3.hpp>
-#include <iostream>
 #include "mlx/backend/common/matmul.h"
 #include "mlx/backend/cuda/device.h"
 #include "mlx/backend/cuda/quantized/cublas_qqmm.h"
@@ -64,8 +63,6 @@ array pad_and_repack_scales(
       cu::malloc_async(pad_outer * pad_inner, encoder.stream()),
       Shape{pad_outer, pad_inner},
       scale.dtype());
-  std::cout << "Allocated scale_tiled with shape: " << scale_tiled.shape()
-            << std::endl;
   repack_scales(scale, scale_tiled, encoder, s);
 
   encoder.add_temporary(scale_tiled);
@@ -205,9 +202,6 @@ void DualQuantizedMatmul::eval_gpu(
   // Repack scales from linear to tiled layout for tensor cores
   array scale_a_tiled = pad_and_repack_scales(scale_a_pre, encoder, s);
   array scale_b_tiled = pad_and_repack_scales(scale_b_pre, encoder, s);
-
-  std::cout << "A scale tiled shape: " << scale_a_tiled.shape()
-            << ", B scale tiled shape: " << scale_b_tiled.shape() << std::endl;
 
   bool a_transposed = false; // a is normal (M x K)
   bool b_transposed = true; // b is transposed (N x K -> K x N)
