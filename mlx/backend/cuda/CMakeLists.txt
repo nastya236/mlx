@@ -45,6 +45,7 @@ target_sources(
           ${CMAKE_CURRENT_SOURCE_DIR}/reduce/row_reduce.cu
           ${CMAKE_CURRENT_SOURCE_DIR}/rms_norm.cu
           ${CMAKE_CURRENT_SOURCE_DIR}/rope.cu
+          ${CMAKE_CURRENT_SOURCE_DIR}/scaled_dot_product_attention.cpp
           ${CMAKE_CURRENT_SOURCE_DIR}/scaled_dot_product_attention.cu
           ${CMAKE_CURRENT_SOURCE_DIR}/scan.cu
           ${CMAKE_CURRENT_SOURCE_DIR}/slicing.cpp
@@ -128,7 +129,11 @@ endif()
 # Compute capability >= 7.0 is required for synchronization between CPU/GPU with
 # managed memory.
 if(NOT DEFINED MLX_CUDA_ARCHITECTURES)
-  set(MLX_CUDA_ARCHITECTURES "native")
+  execute_process(
+    COMMAND bash detect_cuda_arch.sh
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE MLX_CUDA_ARCHITECTURES
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
 endif()
 message(STATUS "CUDA architectures: ${MLX_CUDA_ARCHITECTURES}")
 set_target_properties(mlx PROPERTIES CUDA_ARCHITECTURES
