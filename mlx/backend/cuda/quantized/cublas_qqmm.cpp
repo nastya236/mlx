@@ -1,6 +1,7 @@
 // Copyright © 2025 Apple Inc.
 
 #include "mlx/backend/cuda/quantized/cublas_qqmm.h"
+
 #include <fmt/format.h>
 #include "mlx/backend/cuda/cublas_utils.h"
 
@@ -36,7 +37,7 @@ cudaDataType_t qmode_to_cublas_dtype(std::string_view mode) {
   }
 }
 
-cublasLtMatrixScaleMode_t qmode_to_cublas_scale_mode(std::string_view mode) {
+cublasLtMatmulMatrixScale_t qmode_to_cublas_scale_mode(std::string_view mode) {
   if (mode == "mxfp8") {
     return CUBLASLT_MATMUL_MATRIX_SCALE_VEC32_UE8M0;
   } else if (mode == "nvfp4") {
@@ -59,17 +60,17 @@ CublasQQMM::CublasQQMM(
     uint64_t b_rows,
     uint64_t b_cols,
     int64_t ldb, 
-    std::string_view quantization_mode,
+    std::string_view qmode,
     int32_t batch_count,
     int64_t a_batch_stride,
     int64_t b_batch_stride)
     : handle_(device.lt_handle()),
       pref_(cublas_utils::get_preference(device)),
       M_(a_transposed ? a_cols : a_rows),
-      N_(b_transposed ? b_rows : b_cols), {
+      N_(b_transposed ? b_rows : b_cols) {
 
-  a_scale_mode_ = qmode_to_cublas_scale_mode(quantization_mode);
-  b_scale_mode_ = qmode_to_cublas_scale_mode(quantization_mode); 
+  a_scale_mode_ = qmode_to_cublas_scale_mode(qmode);
+  b_scale_mode_ = qmode_to_cublas_scale_mode(qmode); 
     
   heuristic_.state = CUBLAS_STATUS_NOT_INITIALIZED;
 
@@ -111,7 +112,7 @@ CublasQQMM::CublasQQMM(
 
     // a and b are swaped 
     a_desc_ = cublas_utils::create_matrix_layout(
-        qmode_to_cublas_dtype(quantization_mode),
+        qmode_to_cublas_dtype(qmode),
         b_cols,
         b_rows,
         b_transposed,
@@ -119,7 +120,7 @@ CublasQQMM::CublasQQMM(
         batch_count,
         b_batch_stride);
     b_desc_ = cublas_utils::create_matrix_layout(
-        qmode_to_cublas_dtype(quantization_mode),
+        qmode_to_cublas_dtype(qmode),
         a_cols,
         a_rows,
         a_transposed,

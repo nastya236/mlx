@@ -1,5 +1,6 @@
 // Copyright © 2025 Apple Inc.
 
+#include "mlx/backend/common/matmul.h"
 #include "mlx/backend/cuda/quantized/quantized.h"
 #include "mlx/backend/cuda/device.h"
 #include "mlx/backend/cuda/quantized/cublas_qqmm.h"
@@ -124,12 +125,40 @@ void qqmm_impl(
     const array& b,
     const array& a_scale,
     const array& b_scale,
+    QuantizationMode mode,
     float alpha = 1.0f) {
-  // Invoke CublasQQMM for quantized matrix multiplication
-  CublasQQMM qqmm(
-      encoder.device(), a_transposed, M, K, lda, b_transposed, N, K, ldb);
+  // Invoke CublasQQMM 
+  auto [batch_shape, a_batch_strides, b_batch_strides] = collapse_batches(a, b);
+  auto batch_count = out.size() / (M * N);
+  
+  std::string_view qmode = quantization_mode_to_string(mode);
+  if (batch_count > 1 && !a_transposed && batch_shape.size() == 1 &&
+      a.strides()[a.ndim() - 2] == K && a_batch_strides.back() == M * K &&
+      b_batch_strides.back() == 0) {
+    M *= batch_shape.back();
+    batch_count = 1;
 
-  qqmm.run(encoder, out, a, b, a_scale, b_scale, alpha);
+    a_batch_strides = {0};
+    b_batch_strides = {0};
+    batch_shape = {1};
+  }
+
+  CublasQQMM qqmm(
+      encoder.device(), 
+      a_transposed, 
+      M,
+      K, 
+      lda, 
+      b_transposed, 
+      N, 
+      K, 
+      ldb,
+      qmode,
+      batch_count,  
+      a_batch_strides,
+      b_batch_strides,
+  );
+  qqmm.run(encoder, out, a, b, a_scale, b_scale, batch_shape, a_batch_strides, b_batch_strides, alpha);
 }
 } // namespace
 
@@ -185,7 +214,8 @@ void DualQuantizedMatmul::eval_gpu(
       a,
       b,
       scale_a_tiled,
-      scale_b_tiled);
+      scale_b_tiled, 
+      mode_);
 }
 
 } // namespace mlx::core
