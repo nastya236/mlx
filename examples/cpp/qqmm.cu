@@ -1,14 +1,12 @@
-#include "mlx/mlx.h"
-#include "mlx/backend/cuda/quantized/cublas_qqmm.h"
-#include "mlx/backend/cuda/device.h"
-#include "mlx/stream.h"
 #include <iostream>
-
+#include "mlx/backend/cuda/device.h"
+#include "mlx/backend/cuda/quantized/cublas_qqmm.h"
+#include "mlx/mlx.h"
+#include "mlx/stream.h"
 
 namespace mx = mlx::core;
 
 int main() {
-
   int group_size = 16;
   int bits = 4;
   int M = 128;
@@ -20,9 +18,8 @@ int main() {
   auto s = mx::default_stream(device);
   auto& encoder = mx::cu::get_command_encoder(s);
 
-
-  mx::array a = mx::random::uniform({M, K}, mx::bfloat16);  // (M, K)
-  mx::array b = mx::random::uniform({N, K}, mx::bfloat16);  // (N, K)
+  mx::array a = mx::random::uniform({M, K}, mx::bfloat16); // (M, K)
+  mx::array b = mx::random::uniform({N, K}, mx::bfloat16); // (N, K)
 
   auto scaled_a = mx::quantize(a, group_size, bits, quantization_mode);
   auto scaled_b = mx::quantize(b, group_size, bits, quantization_mode);
@@ -39,14 +36,18 @@ int main() {
       b_scale,
       true,
       group_size,
-      bits, quantization_mode);
-  
-  mx::array a_dequantized = mx::dequantize(a_quantized, a_scale, {}, 16, 4, "nvfp4");
-  mx::array b_dequantized = mx::dequantize(b_quantized, b_scale, {}, 16, 4, "nvfp4");
+      bits,
+      quantization_mode);
 
-  mx::array reference_deq = mx::matmul(a_dequantized, mx::transpose(b_dequantized));
+  mx::array a_dequantized =
+      mx::dequantize(a_quantized, a_scale, {}, 16, 4, "nvfp4");
+  mx::array b_dequantized =
+      mx::dequantize(b_quantized, b_scale, {}, 16, 4, "nvfp4");
+
+  mx::array reference_deq =
+      mx::matmul(a_dequantized, mx::transpose(b_dequantized));
   mx::array isclose = mx::allclose(out, reference_deq, 1e-1f);
-  
+
   std::cout << isclose << std::endl;
   return 0;
 }
