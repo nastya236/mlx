@@ -320,7 +320,7 @@ class QQLinear(Module):
         group_size: int = None,
         bits: int = None,
         mode: str = "nvfp4",
-        use_global_scale: bool = True,
+        use_global_scale: bool = False,
     ):
         super().__init__()
 
