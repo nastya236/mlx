@@ -16,6 +16,7 @@
 
 constexpr float F8E4M3_MAX = 448.0f;
 constexpr float F4E2M1_MAX = 6.0f;
+constexpr float FLOAT_MAX = 3.402823466e+38f;
 
 namespace mlx::core {
 namespace cu {
@@ -45,8 +46,12 @@ __global__ void fp_quantize_rowwise(
   // Per-block decode scale: S_dec_b = (block_amax / 6) × S_enc → stored as FP8
   // E4M3 Per-block encode scale: S_enc_b = S_enc / S_dec_b
   const bool use_global_scale = global_scale != nullptr;
-  const float scale_enc =
+  float scale_enc =
       use_global_scale ? (F8E4M3_MAX * F4E2M1_MAX) / *global_scale : 1.0f;
+  scale_enc = fminf(scale_enc, FLOAT_MAX);
+  if (use_global_scale && (*global_scale == 0.0f || scale_enc == 0.0f)) {
+    scale_enc = 1.0f;
+  }
 
   using Tx2 = Vector2_t<T>;
   using Tx4 = Vector4_t<T>;
@@ -82,12 +87,13 @@ __global__ void fp_quantize_rowwise(
 
   scale_dec_b /= bits == 4 ? F4E2M1_MAX : F8E4M3_MAX;
   scale_dec_b *= scale_enc;
+  scale_dec_b = fminf(scale_dec_b, FLOAT_MAX);
   // Convert to mx scale or nv scale
   using ScaleType =
       std::conditional_t<use_mx_scale, __nv_fp8_e8m0, __nv_fp8_e4m3>;
   auto s = ScaleType(scale_dec_b);
   uint8_t q_scale = s.__x;
-  float scale_enc_b = scale_enc / float(s);
+  float scale_enc_b = fminf(scale_enc / float(s), FLOAT_MAX);
 
   scales[thread_idx] = q_scale;
   constexpr int elem_per_byte = bits == 8 ? 1 : 2;
@@ -123,8 +129,12 @@ __global__ void fp_quantize_columnwise(
   // Scales: [M, K/group_size] row-major (K-major)
   // Quantize along K (last dimension, groups of group_size elements)
   const bool use_global_scale = global_scale != nullptr;
-  const float scale_enc =
+  float scale_enc =
       use_global_scale ? (F8E4M3_MAX * F4E2M1_MAX) / *global_scale : 1.0f;
+  scale_enc = fminf(scale_enc, FLOAT_MAX);
+  if (use_global_scale && (*global_scale == 0.0f || scale_enc == 0.0f)) {
+    scale_enc = 1.0f;
+  }
 
   using Tx2 = Vector2_t<T>;
   using Tx4 = Vector4_t<T>;
@@ -181,11 +191,12 @@ __global__ void fp_quantize_columnwise(
             fabsf(static_cast<float>(amax_2x.y)));
     scale_dec_b /= bits == 4 ? F4E2M1_MAX : F8E4M3_MAX;
     scale_dec_b *= scale_enc;
+    scale_dec_b = fminf(scale_dec_b, FLOAT_MAX);
     // Convert to mx scale or nv scale
     using ScaleType =
         std::conditional_t<use_mx_scale, __nv_fp8_e8m0, __nv_fp8_e4m3>;
     auto s = ScaleType(scale_dec_b);
-    float scale_enc_b = scale_enc / float(s);
+    float scale_enc_b = fminf(scale_enc / float(s), FLOAT_MAX);
     scales_smem[tidx][tidy] = s.__x;
 
     int shared_idx = tidx * padded_local_cols + tidy * bytes_per_group;
