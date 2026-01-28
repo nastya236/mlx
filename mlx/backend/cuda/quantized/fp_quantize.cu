@@ -115,6 +115,12 @@ __global__ void fp_quantize_rowwise(
   store_vector<group_size / elem_per_byte>(out, thread_idx, quantized);
 }
 
+__device__ __forceinline__ int swizzle_smem_idx(int idx, int tidy) {
+  int bank_bits = (idx >> 2) & 0x1F;
+  int xored_bank = bank_bits ^ ((tidy * 5) & 0x1F);
+  return (idx & ~0x7C) | (xored_bank << 2);
+}
+
 template <typename T, int group_size, int bits, bool use_mx_scale, bool USE_SR>
 __global__ void fp_quantize_columnwise(
     T* w,
@@ -207,13 +213,13 @@ __global__ void fp_quantize_columnwise(
       if constexpr (bits == 8) {
         uint32_t quantized_val =
             scale_cvt_Tx4_to_fp8x4<T, USE_SR>(w_Tx4, scale_enc_b, rbits);
-        *reinterpret_cast<uint32_t*>(&quantized_smem[shared_idx + j * 4]) =
-            quantized_val;
+        int write_idx = swizzle_smem_idx(shared_idx + j * 4, tidy);
+        *reinterpret_cast<uint32_t*>(&quantized_smem[write_idx]) = quantized_val;
       } else {
         uint16_t quantized_val =
             scale_cvt_Tx4_to_fp4x4<T, USE_SR>(w_Tx4, scale_enc_b, rbits);
-        *reinterpret_cast<uint16_t*>(&quantized_smem[shared_idx + j * 2]) =
-            quantized_val;
+        int write_idx = swizzle_smem_idx(shared_idx + j * 2, tidy);
+        *reinterpret_cast<uint16_t*>(&quantized_smem[write_idx]) = quantized_val;
       }
     }
   }
@@ -232,8 +238,10 @@ __global__ void fp_quantize_columnwise(
     int global_col = bidx * local_cols + local_col;
 
     if (global_row < M && global_col < output_cols) {
+      int orig_tidy = local_col / bytes_per_group;
       int physical_idx = local_row * padded_local_cols + local_col;
-      out[global_row * output_cols + global_col] = quantized_smem[physical_idx];
+      int swizzled_idx = swizzle_smem_idx(physical_idx, orig_tidy);
+      out[global_row * output_cols + global_col] = quantized_smem[swizzled_idx];
     }
   }
   // Write back scales
