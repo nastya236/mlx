@@ -115,12 +115,6 @@ __global__ void fp_quantize_rowwise(
   store_vector<group_size / elem_per_byte>(out, thread_idx, quantized);
 }
 
-__device__ __forceinline__ int swizzle_smem_idx(int idx, int tidy) {
-  int bank_bits = (idx >> 2) & 0x1F;
-  int xored_bank = bank_bits ^ ((tidy * 5) & 0x1F);
-  return (idx & ~0x7C) | (xored_bank << 2);
-}
-
 template <typename T, int group_size, int bits, bool use_mx_scale, bool USE_SR>
 __global__ void fp_quantize_columnwise(
     T* w,
@@ -134,6 +128,10 @@ __global__ void fp_quantize_columnwise(
   // Quantized output: [M, K/elem_per_byte] row-major (K-major)
   // Scales: [M, K/group_size] row-major (K-major)
   // Quantize along K (last dimension, groups of group_size elements)
+  //
+  // Block layout: BLOCK_X=32 (rows), BLOCK_Y=16 (column-groups)
+  // This ensures all threads in a warp have the same tidy, avoiding
+  // shared memory bank conflicts when writing quantized data.
   const bool use_global_scale = global_scale != nullptr;
   float scale_enc =
       use_global_scale ? (F8E4M3_MAX * F4E2M1_MAX) / *global_scale : 1.0f;
@@ -149,8 +147,9 @@ __global__ void fp_quantize_columnwise(
   auto block_idx = cg::this_thread_block().group_index();
   auto idx_in_block = cg::this_thread_block().thread_index();
 
-  constexpr int BLOCK_X = 16;
-  constexpr int BLOCK_Y = 32;
+  // BLOCK_X=32 ensures warp = (tidx=0-31, same tidy), no inter-tidy bank conflicts
+  constexpr int BLOCK_X = 32;
+  constexpr int BLOCK_Y = 16;
   constexpr int elem_per_byte = (bits == 8) ? 1 : 2;
   constexpr int bytes_per_group = group_size / elem_per_byte;
 
@@ -213,13 +212,13 @@ __global__ void fp_quantize_columnwise(
       if constexpr (bits == 8) {
         uint32_t quantized_val =
             scale_cvt_Tx4_to_fp8x4<T, USE_SR>(w_Tx4, scale_enc_b, rbits);
-        int write_idx = swizzle_smem_idx(shared_idx + j * 4, tidy);
-        *reinterpret_cast<uint32_t*>(&quantized_smem[write_idx]) = quantized_val;
+        *reinterpret_cast<uint32_t*>(&quantized_smem[shared_idx + j * 4]) =
+            quantized_val;
       } else {
         uint16_t quantized_val =
             scale_cvt_Tx4_to_fp4x4<T, USE_SR>(w_Tx4, scale_enc_b, rbits);
-        int write_idx = swizzle_smem_idx(shared_idx + j * 2, tidy);
-        *reinterpret_cast<uint16_t*>(&quantized_smem[write_idx]) = quantized_val;
+        *reinterpret_cast<uint16_t*>(&quantized_smem[shared_idx + j * 2]) =
+            quantized_val;
       }
     }
   }
@@ -238,10 +237,8 @@ __global__ void fp_quantize_columnwise(
     int global_col = bidx * local_cols + local_col;
 
     if (global_row < M && global_col < output_cols) {
-      int orig_tidy = local_col / bytes_per_group;
       int physical_idx = local_row * padded_local_cols + local_col;
-      int swizzled_idx = swizzle_smem_idx(physical_idx, orig_tidy);
-      out[global_row * output_cols + global_col] = quantized_smem[swizzled_idx];
+      out[global_row * output_cols + global_col] = quantized_smem[physical_idx];
     }
   }
   // Write back scales
@@ -311,8 +308,10 @@ __global__ void fp_dequantize(
 
 inline std::tuple<dim3, dim3>
 get_columnwise_quantize_launch_args(size_t size, int group_size, int M, int K) {
-  constexpr int BLOCK_X = 16;
-  constexpr int BLOCK_Y = 32;
+  // BLOCK_X=32 ensures all threads in a warp have the same tidy,
+  // avoiding shared memory bank conflicts
+  constexpr int BLOCK_X = 32;
+  constexpr int BLOCK_Y = 16;
   int rows_per_block = BLOCK_X;
   int cols_per_block = BLOCK_Y * group_size;
 
