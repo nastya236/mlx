@@ -77,6 +77,39 @@ scale_cvt_bf16x4_to_fp4x4_rn(const bf16x4 input_bf16x4, const float2 scale) {
   return out_fp4x4;
 }
 
+__device__ __forceinline__ uint16_t
+scale_cvt_bf16x4_to_fp4x4_rn_v2(const bf16x4 input_bf16x4, const float scale) {
+  uint16_t out_fp4x4 = 0;
+  __nv_bfloat16 scale_bf16 = __float2bfloat16(scale);
+  __nv_bfloat162 scale_bf16x2 = make_bfloat162(scale_bf16, scale_bf16);
+
+  asm volatile(
+      "{\n"
+      ".reg.b16 x0_bf16; \n\t"
+      ".reg.b16 x1_bf16; \n\t"
+      ".reg.b16 x2_bf16; \n\t"
+      ".reg.b16 x3_bf16; \n\t"
+      ".reg.b32 x01; \n\t" // to hold vector mul
+      ".reg.b32 x23; \n\t"
+      ".reg.b8 q0; \n\t" 
+      ".reg.b8 q1; \n\t" 
+      "mov.b64 {x0_bf16, x1_bf16, x2_bf16, x3_bf16} , %1; \n\t" // unpack bf16
+      "mov.b32 x01, {x0_bf16, x1_bf16}; \n\t"
+      "mov.b32 x23, {x2_bf16, x3_bf16}; \n\t"
+      "mul.rn.bf16x2 x01, x01, %2; \n\t"
+      "mul.rn.bf16x2 x23, x23, %2; \n\t"
+      // "mov.b32 {x0, x1}, x01; \n\t"
+      // "mov.b32 {x2, x3}, x01; \n\t"
+      "cvt.rn.satfinite.e2m1x2.bf16x2 q0, x01; \n\t"
+      "cvt.rn.satfinite.e2m1x2.bf16x2 q1, x23; \n\t"
+      "mov.b16 %0, {q0, q1}; \n\t"
+      "}"
+      : "=h"(out_fp4x4)
+      : "l"(reinterpret_cast<const uint64_t&>(input_bf16x4)),
+        "r"(reinterpret_cast<const uint32_t&>(scale_bf16x2)));
+  return out_fp4x4;
+}
+
 __device__ __forceinline__ uint16_t scale_cvt_bf16x4_to_fp4x4_rs(
     const bf16x4 input_bf16x4,
     const float2 scale,
@@ -263,11 +296,11 @@ __device__ __forceinline__ uint16_t scale_cvt_bf16x4_to_fp4x4(
     const bf16x4 input,
     const float scale,
     uint32_t rbits) {
-  float2 scale_fp32x2 = make_float2(scale, scale);
   if constexpr (USE_SR) {
+    float2 scale_fp32x2 = make_float2(scale, scale);
     return scale_cvt_bf16x4_to_fp4x4_rs(input, scale_fp32x2, rbits);
   } else {
-    return scale_cvt_bf16x4_to_fp4x4_rn(input, scale_fp32x2);
+    return scale_cvt_bf16x4_to_fp4x4_rn_v2(input, scale);
   }
 }
 
