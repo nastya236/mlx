@@ -25,7 +25,6 @@ void concatenate_gpu(
 
   auto& encoder = cu::get_command_encoder(s);
   out.set_data(cu::malloc_async(out.nbytes(), encoder));
-
   auto strides = out.strides();
   auto flags = out.flags();
   flags.row_contiguous = false;
@@ -37,7 +36,11 @@ void concatenate_gpu(
     size_t data_offset = strides[axis] * sizes[i];
     out_slice.copy_shared_buffer(
         out, strides, flags, out_slice.size(), data_offset);
-    copy_gpu_inplace(inputs[i], out_slice, CopyType::GeneralGeneral, s);
+    auto ctype = CopyType::GeneralGeneral;
+    if (axis == 0 && inputs[i].flags().row_contiguous) {
+      ctype = CopyType::Vector;
+    }
+    copy_gpu_inplace(inputs[i], out_slice, ctype, s);
   }
 }
 
