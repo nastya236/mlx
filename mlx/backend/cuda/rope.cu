@@ -12,6 +12,21 @@ namespace mlx::core {
 
 namespace cu {
 
+template <typename F>
+void dispatch_vec(int v, F&& f) {
+  switch (v) {
+    case 8:
+      f(std::integral_constant<int, 8>{});
+      return;
+    case 4:
+      f(std::integral_constant<int, 4>{});
+      return;
+    default:
+      f(std::integral_constant<int, 2>{});
+      return;
+  }
+}
+
 template <typename T, bool traditional, bool forward>
 __device__ void rope_single_impl(
     const T* in,
@@ -238,6 +253,89 @@ __global__ void rope_freqs(
       dims);
 }
 
+template <typename T, bool forward, int VEC>
+__global__ void rope_vec(
+    const T* in,
+    T* out,
+    const int32_t* offset,
+    const float* freqs,
+    float scale,
+    float log2_base,
+    const __grid_constant__ cuda::std::array<int64_t, 4> strides,
+    const __grid_constant__ cuda::std::array<int64_t, 4> out_strides,
+    int64_t offset_stride,
+    int64_t freq_stride,
+    int n_head,
+    int n_seq,
+    int half,
+    int heads_per_block) {
+  extern __shared__ float smem[];
+  float* s_cos = smem;
+  float* s_sin = smem + half;
+
+  const int n_chunk = half / VEC;
+  const int chunk = threadIdx.x % n_chunk;
+  const int head_in_block = threadIdx.x / n_chunk;
+
+  const int groups = (n_head + heads_per_block - 1) / heads_per_block;
+  const int batch_idx = blockIdx.x / groups;
+  const int head_idx = (blockIdx.x % groups) * heads_per_block + head_in_block;
+  const int32_t batch_offset = offset[batch_idx * offset_stride];
+
+  const int64_t in_bh = batch_idx * strides[0] + head_idx * strides[1];
+  const int64_t out_bh = batch_idx * out_strides[0] + head_idx * out_strides[1];
+
+  // Grid-stride over the sequence so gridDim.y stays within its 65535 limit.
+  for (int s = blockIdx.y; s < n_seq; s += gridDim.y) {
+    __syncthreads();
+    for (int d = threadIdx.x; d < half; d += blockDim.x) {
+      float inv_freq = freqs != nullptr
+          ? 1.0f / freqs[freq_stride * d]
+          : exp2f(
+                -(static_cast<float>(d) / static_cast<float>(half)) *
+                log2_base);
+      float theta = scale * static_cast<float>(s + batch_offset) * inv_freq;
+      s_cos[d] = cosf(theta);
+      s_sin[d] = sinf(theta);
+    }
+    __syncthreads();
+
+    // Trailing heads in the last group have no work, but must still reach the
+    // __syncthreads() above on every iteration.
+    if (head_idx >= n_head) {
+      continue;
+    }
+
+    const int64_t i1 =
+        in_bh + static_cast<int64_t>(s) * strides[2] + chunk * VEC;
+    const int64_t o1 =
+        out_bh + static_cast<int64_t>(s) * out_strides[2] + chunk * VEC;
+
+    auto x1 = unsafe_load_vector<VEC>(in + i1, 0);
+    auto x2 = unsafe_load_vector<VEC>(in + i1 + half, 0);
+    AlignedVector<T, VEC> r1;
+    AlignedVector<T, VEC> r2;
+
+#pragma unroll
+    for (int i = 0; i < VEC; ++i) {
+      float costheta = s_cos[chunk * VEC + i];
+      float sintheta = s_sin[chunk * VEC + i];
+      float f1 = static_cast<float>(x1[i]);
+      float f2 = static_cast<float>(x2[i]);
+      if (forward) {
+        r1[i] = static_cast<T>(f1 * costheta - f2 * sintheta);
+        r2[i] = static_cast<T>(f1 * sintheta + f2 * costheta);
+      } else {
+        r1[i] = static_cast<T>(f2 * sintheta + f1 * costheta);
+        r2[i] = static_cast<T>(f2 * costheta - f1 * sintheta);
+      }
+    }
+
+    unsafe_store_vector<VEC>(out + o1, 0, r1);
+    unsafe_store_vector<VEC>(out + o1 + half, 0, r2);
+  }
+}
+
 } // namespace cu
 
 namespace fast {
@@ -317,6 +415,22 @@ void RoPE::eval_gpu(
   bool single = in.flags().row_contiguous && B == 1 && T == 1;
   bool with_freqs = inputs.size() == 3;
 
+  int half = dims_ / 2;
+  auto vec_ok = [&](int v) {
+    if (traditional_ || single || half % v != 0) {
+      return false;
+    }
+    if (strides[3] != 1 || out_strides[3] != 1) {
+      return false;
+    }
+    for (int i = 0; i < 3; ++i) {
+      if (strides[i] % v != 0 || out_strides[i] % v != 0) {
+        return false;
+      }
+    }
+    return true;
+  };
+
   encoder.set_input_array(donated ? out : in);
   encoder.set_input_array(offset);
   if (with_freqs) {
@@ -325,6 +439,70 @@ void RoPE::eval_gpu(
   encoder.set_output_array(out);
   dispatch_float_types(out.dtype(), "rope", [&](auto type_tag) {
     using DataType = cuda_type_t<MLX_GET_TYPE(type_tag)>;
+
+    constexpr int max_vec = 16 / sizeof(DataType);
+    auto* in_ptr = gpu_ptr<DataType>(donated ? out : in);
+    auto* out_ptr = gpu_ptr<DataType>(out);
+    auto ptrs_aligned = [&](int v) {
+      size_t width = v * sizeof(DataType);
+      return (reinterpret_cast<uintptr_t>(in_ptr) % width) == 0 &&
+          (reinterpret_cast<uintptr_t>(out_ptr) % width) == 0;
+    };
+    int vec = 0;
+    for (int v = max_vec; v >= 2; v /= 2) {
+      if (vec_ok(v) && ptrs_aligned(v)) {
+        vec = v;
+        break;
+      }
+    }
+
+    if (vec > 0) {
+      dispatch_bool(forward_, [&](auto forward) {
+        cu::dispatch_vec(vec, [&](auto vec_tag) {
+          constexpr int VEC = MLX_GET_VALUE(vec_tag);
+          // Widths wider than 16 bytes are never selected for this type.
+          if constexpr (VEC * sizeof(DataType) <= 16) {
+            auto kernel = cu::rope_vec<DataType, forward.value, VEC>;
+
+            int n_chunk = half / VEC;
+            // ~256 threads per block, but never more heads than we have.
+            int heads_per_block = std::max(1, std::min(N, 256 / n_chunk));
+            int groups = (N + heads_per_block - 1) / heads_per_block;
+            dim3 block(n_chunk * heads_per_block, 1, 1);
+            dim3 grid(B * groups, std::min<uint32_t>(T, 65535), 1);
+            uint32_t smem = 2 * half * sizeof(float);
+
+            int64_t offset_stride =
+                inputs[1].ndim() > 0 ? inputs[1].strides()[0] : 0;
+            const float* freqs_ptr =
+                with_freqs ? gpu_ptr<float>(inputs[2]) : nullptr;
+            int64_t fstride = with_freqs ? inputs[2].strides(0) : 0;
+            encoder.add_kernel_node_ex(
+                kernel,
+                grid,
+                block,
+                dim3{},
+                smem,
+                in_ptr,
+                out_ptr,
+                gpu_ptr<int32_t>(offset),
+                freqs_ptr,
+                scale_,
+                std::log2(base_),
+                strides,
+                out_strides,
+                offset_stride,
+                fstride,
+                N,
+                T,
+                half,
+                heads_per_block);
+          }
+        });
+      });
+      return;
+    }
+
     dispatch_bool(traditional_, [&](auto traditional) {
       dispatch_bool(forward_, [&](auto forward) {
         if (single && !with_freqs) {
