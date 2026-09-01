@@ -105,12 +105,33 @@ def _sharded_to_all(segments):
     return _shard_fn
 
 
-def _check_sharding(sharding):
-    if sharding not in ("all-to-sharded", "sharded-to-all"):
+def _shard_experts(parameters, group):
+    N = group.size()
+    r = group.rank()
+
+    def _shard_fn(path, weight):
+        if not isinstance(weight, mx.array) or weight.ndim == 0:
+            return weight
+        if weight.shape[0] % N != 0:
+            raise ValueError(
+                f"Cannot shard parameter '{path}' with shape {weight.shape} "
+                f"across {N} devices: axis 0 must be divisible by {N}."
+            )
+        return mx.contiguous(weight[r::N])
+
+    return tree_map_with_path(_shard_fn, parameters)
+
+
+_SHARDINGS = ("all-to-sharded", "sharded-to-all", "expert-parallel")
+_LINEAR_SHARDINGS = ("all-to-sharded", "sharded-to-all")
+
+
+def _check_sharding(sharding, allowed=_SHARDINGS):
+    if sharding not in allowed:
         raise ValueError(
             (
                 f"Sharding type {sharding=} not supported, "
-                "choose one of 'all-to-sharded' or 'sharded-to-all'"
+                f"choose one of {' or '.join(repr(s) for s in allowed)}"
             )
         )
 
@@ -130,21 +151,32 @@ def shard_inplace(
     comprise the unsharded weight. For instance if the weight is a fused QKV
     matrix the segments should be 3.
 
+    Use ``"expert-parallel"`` to shard a switch layer over its experts. Every
+    parameter is strided on axis 0, so member ``r`` of the group holds experts
+    ``r, r + N, r + 2N, ...`` and ends up with ``num_experts // N`` of them.
+
     .. note::
         The module doesn't change so in order for distributed communication to
         happen the module needs to natively support it and for it to be enabled.
+        For ``"expert-parallel"`` the router stays replicated, so the caller
+        maps the global expert indices onto the shard with ``indices % N ==
+        rank`` and ``indices // N`` and reduces the partial results.
 
     Args:
         module (mlx.nn.Module): The parameters of this module will be sharded
             in-place.
-        sharding (str or callable): One of "all-to-sharded" and
-            "sharded-to-all" or a callable that returns the sharding axis and
-            segments.
+        sharding (str or callable): One of "all-to-sharded", "sharded-to-all"
+            and "expert-parallel" or a callable that returns the sharding axis
+            and segments.
         segments (int or list): The segments to use if ``sharding`` is a
             string. Default: ``1``.
         group (mlx.core.distributed.Group): The distributed group to shard
             across. If not set, the global group will be used. Default: ``None``.
     """
+    group = group or mx.distributed.init()
+    if sharding == "expert-parallel":
+        module.update(_shard_experts(module.parameters(), group))
+        return
     if isinstance(sharding, str):
         _check_sharding(sharding)
         sharding = (
@@ -178,7 +210,7 @@ def shard_linear(
         group (mlx.core.distributed.Group): The distributed group to shard
             across. If not set, the global group will be used. Default: ``None``.
     """
-    _check_sharding(sharding)
+    _check_sharding(sharding, _LINEAR_SHARDINGS)
     fns = {
         ("all-to-sharded", True): AllToShardedLinear.from_linear,
         ("all-to-sharded", False): QuantizedAllToShardedLinear.from_quantized_linear,
