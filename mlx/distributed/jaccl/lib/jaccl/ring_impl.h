@@ -6,6 +6,7 @@
 #include <span>
 
 #include "jaccl/rdma.h"
+#include "jaccl/ring_profile.h"
 #include "jaccl/threadpool.h"
 
 constexpr int RING_MAX_CONNS = 4;
@@ -90,7 +91,7 @@ class RingImpl {
 
     // Split the reduce scatter + all gather across the available wires. Each
     // wire handles a contiguous slice of each chunk in every direction.
-    dispatch_wires(n_wires, [&](int lw) {
+    auto run_wire = [&](int lw, RingWireProfile* profile = nullptr) {
       all_reduce_wire<MAX_DIR>(
           in_ptr,
           out_ptr,
@@ -99,8 +100,23 @@ class RingImpl {
           size_per_wire,
           n_wires,
           lw,
-          reduce_op);
-    });
+          reduce_op,
+          profile);
+    };
+    if (RingProfile::enabled() && size * sizeof(T) > 32768) {
+      RingProfile profile(n_wires);
+      dispatch_wires(
+          n_wires, [&](int lw) { run_wire(lw, &profile.wires[lw]); });
+      profile.report(
+          rank_,
+          size_,
+          MAX_DIR,
+          size * sizeof(T),
+          sizeof(T),
+          in_ptr == out_ptr);
+    } else {
+      dispatch_wires(n_wires, [&](int lw) { run_wire(lw); });
+    }
   }
 
   // Perform the ring all reduce (reduce scatter followed by all gather) for a
@@ -120,7 +136,12 @@ class RingImpl {
       int64_t size_per_wire,
       int n_wires,
       int lw,
-      ReduceOp reduce_op) {
+      ReduceOp reduce_op,
+      RingWireProfile* profile = nullptr) {
+    if (profile) {
+      pthread_threadid_np(nullptr, &profile->thread_id);
+      profile->start = RingProfileStamp::now();
+    }
     // This wire's slice within the chunk: [wire_offset, wire_end). Clamp to the
     // per wire end (not the whole region) so the last frame can't spill into
     // the next wire's slice when size_per_wire is not a multiple of N.
@@ -173,6 +194,9 @@ class RingImpl {
           out_ptr,
           ReduceRecvOp<ReduceOp, false>{reduce_op});
     }
+    if (profile) {
+      profile->reduced = RingProfileStamp::now();
+    }
     ring_pass<MAX_DIR, T>(
         lw,
         size,
@@ -186,6 +210,9 @@ class RingImpl {
         out_ptr,
         out_ptr,
         CopyOp{});
+    if (profile) {
+      profile->finished = RingProfileStamp::now();
+    }
   }
 
   void
