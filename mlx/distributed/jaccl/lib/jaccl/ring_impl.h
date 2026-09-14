@@ -6,6 +6,7 @@
 #include <span>
 
 #include "jaccl/rdma.h"
+#include "jaccl/scatter_profile.h"
 #include "jaccl/threadpool.h"
 
 constexpr int RING_MAX_CONNS = 4;
@@ -262,10 +263,41 @@ class RingImpl {
     // Two directional regions, each split across the wires.
     int64_t size_per_wire = (chunk + (2 * n_wires) - 1) / (2 * n_wires);
 
-    dispatch_wires(n_wires, [&](int lw) {
-      reduce_scatter_wire<T>(
-          in_ptr, out_ptr, chunk, size_per_wire, n_wires, lw, reduce_op);
-    });
+    const char* profile_env = std::getenv("JACCL_PROFILE_SCATTER");
+    if (profile_env && std::strcmp(profile_env, "1") == 0) {
+      std::vector<ScatterProfile> profiles(n_wires);
+      auto call = ScatterProfile::next_call.fetch_add(1);
+      double start = ScatterProfile::wall_time();
+      dispatch_wires(n_wires, [&](int lw) {
+        reduce_scatter_wire<T, ReduceOp, true>(
+            in_ptr,
+            out_ptr,
+            chunk,
+            size_per_wire,
+            n_wires,
+            lw,
+            reduce_op,
+            &profiles[lw]);
+      });
+      double elapsed = ScatterProfile::wall_time() - start;
+      for (int lw = 0; lw < n_wires; lw++) {
+        profiles[lw].report(
+            call,
+            rank_,
+            size_,
+            n_wires,
+            lw,
+            chunk * sizeof(T),
+            sizeof(T),
+            start,
+            elapsed);
+      }
+    } else {
+      dispatch_wires(n_wires, [&](int lw) {
+        reduce_scatter_wire<T>(
+            in_ptr, out_ptr, chunk, size_per_wire, n_wires, lw, reduce_op);
+      });
+    }
   }
 
   // Perform the dual direction ring reduce scatter for a single wire lw.
@@ -283,7 +315,7 @@ class RingImpl {
   // partial that is still being staged for sending, a recv slice is only
   // reduced into the output once the matching send slice has been staged (i.e.
   // recv_count[lr] < send_count[lr]).
-  template <typename T, typename ReduceOp>
+  template <typename T, typename ReduceOp, bool Profile = false>
   void reduce_scatter_wire(
       const T* in_ptr,
       T* out_ptr,
@@ -291,7 +323,21 @@ class RingImpl {
       int64_t size_per_wire,
       int n_wires,
       int lw,
-      ReduceOp reduce_op) {
+      ReduceOp reduce_op,
+      ScatterProfile* profile = nullptr) {
+    if constexpr (Profile) {
+      profile->start = ScatterProfile::wall_time();
+      profile->cpu_start = ScatterProfile::cpu_time();
+    }
+    auto timed = [&](int category, auto&& fn) {
+      if constexpr (Profile) {
+        double start = ScatterProfile::wall_time();
+        fn();
+        profile->seconds[category] += ScatterProfile::wall_time() - start;
+      } else {
+        fn();
+      }
+    };
     constexpr int MAX_DIR = 2;
     constexpr int PIPELINE = 2;
     constexpr int WC_NUM = PIPELINE * 2 * MAX_DIR;
@@ -300,6 +346,9 @@ class RingImpl {
         buffer_size_from_message(size_per_wire * sizeof(T));
     int64_t N = buffer_bytes / sizeof(T);
     int64_t total = static_cast<int64_t>(size_) * chunk;
+    if constexpr (Profile) {
+      profile->buffer_bytes = buffer_bytes;
+    }
 
     // This wire's slice within the chunk: [wire_offset, wire_end). Clamp to the
     // per wire end (not the whole region) so the last frame can't spill into
@@ -338,22 +387,32 @@ class RingImpl {
     // recv slice recv_count[lr] lives in pipeline buffer recv_count[lr] %
     // PIPELINE.
     auto drain_deferred = [&](int lr) {
+      if constexpr (Profile) {
+        if (recv_count[lr] < send_count[lr]) {
+          profile->set_blocked(lr, false);
+        }
+      }
       while (deferred_recv[lr] > 0 && recv_count[lr] < send_count[lr]) {
         int slice = recv_count[lr];
         int b = slice % PIPELINE;
         int64_t offset = wire_offset[lr] + static_cast<int64_t>(slice) * N;
         int64_t n = std::min(N, wire_end[lr] - offset);
-        reduce_op(
-            recv_buffer(sz, b, lr, lw).template begin<T>(),
-            in_ptr + in_recv_offset[lr] + offset,
-            out_ptr + offset,
-            std::max<int64_t>(0, n));
+        timed(ScatterProfile::Reduce, [&] {
+          reduce_op(
+              recv_buffer(sz, b, lr, lw).template begin<T>(),
+              in_ptr + in_recv_offset[lr] + offset,
+              out_ptr + offset,
+              std::max<int64_t>(0, n));
+        });
         recv_count[lr]++;
         deferred_recv[lr]--;
         if (recv_count[lr] + (PIPELINE - 1) < n_steps) {
-          recv_from(sz, b, lr, lw);
+          timed(ScatterProfile::PostRecv, [&] { recv_from(sz, b, lr, lw); });
           in_flight++;
         }
+      }
+      if constexpr (Profile) {
+        profile->set_blocked(lr, deferred_recv[lr] > 0);
       }
     };
 
@@ -372,17 +431,19 @@ class RingImpl {
       int buff = 0;
       while (buff < n_steps && buff < PIPELINE) {
         for (int lr = 0; lr < MAX_DIR; lr++) {
-          recv_from(sz, buff, lr, lw);
+          timed(ScatterProfile::PostRecv, [&] { recv_from(sz, buff, lr, lw); });
         }
         for (int lr = 0; lr < MAX_DIR; lr++) {
           int64_t offset = wire_offset[lr] + send_count[lr] * N;
-          std::copy(
-              send_base + send_base_offset[lr] + offset,
-              send_base + send_base_offset[lr] +
-                  std::max(offset, std::min(offset + N, wire_end[lr])),
-              send_buffer(sz, buff, lr, lw).template begin<T>());
+          timed(ScatterProfile::Copy, [&] {
+            std::copy(
+                send_base + send_base_offset[lr] + offset,
+                send_base + send_base_offset[lr] +
+                    std::max(offset, std::min(offset + N, wire_end[lr])),
+                send_buffer(sz, buff, lr, lw).template begin<T>());
+          });
           send_count[lr]++;
-          send_to(sz, buff, lr, lw);
+          timed(ScatterProfile::PostSend, [&] { send_to(sz, buff, lr, lw); });
         }
 
         buff++;
@@ -392,7 +453,13 @@ class RingImpl {
       // Main loop
       while (in_flight > 0) {
         ibv_wc wc[WC_NUM];
-        int n = poll_wire(lw, WC_NUM, wc);
+        int n;
+        timed(ScatterProfile::Poll, [&] { n = poll_wire(lw, WC_NUM, wc); });
+        if constexpr (Profile) {
+          profile->polls++;
+          profile->empty_polls += (n == 0);
+          profile->completions += n;
+        }
         for (int i = 0; i < n; i++) {
           int work_type = wc[i].wr_id >> 16;
           int buff = (wc[i].wr_id >> 8) & 0xff;
@@ -403,13 +470,16 @@ class RingImpl {
           if (work_type == SEND_WR) {
             if (send_count[lr] < n_steps) {
               int64_t offset = wire_offset[lr] + send_count[lr] * N;
-              std::copy(
-                  send_base + send_base_offset[lr] + offset,
-                  send_base + send_base_offset[lr] +
-                      std::max(offset, std::min(offset + N, wire_end[lr])),
-                  send_buffer(sz, buff, lr, lw).template begin<T>());
+              timed(ScatterProfile::Copy, [&] {
+                std::copy(
+                    send_base + send_base_offset[lr] + offset,
+                    send_base + send_base_offset[lr] +
+                        std::max(offset, std::min(offset + N, wire_end[lr])),
+                    send_buffer(sz, buff, lr, lw).template begin<T>());
+              });
               send_count[lr]++;
-              send_to(sz, buff, lr, lw);
+              timed(
+                  ScatterProfile::PostSend, [&] { send_to(sz, buff, lr, lw); });
               in_flight++;
             }
             // A newly staged send may unblock deferred recvs.
@@ -435,6 +505,10 @@ class RingImpl {
         send_count[lr] = recv_count[lr] = 0;
         deferred_recv[lr] = 0;
       }
+    }
+    if constexpr (Profile) {
+      profile->cpu = ScatterProfile::cpu_time() - profile->cpu_start;
+      profile->elapsed = ScatterProfile::wall_time() - profile->start;
     }
   }
 
